@@ -18,6 +18,12 @@ func retriesPaused(urls: [URL]) -> Bool {
     !urls.isEmpty && !opensSettings(xpcServiceName: nil, urls: urls)
 }
 
+/// WDRC-101: whether the run queued behind the running one retries paused probes. `pending`: an earlier click already
+/// asked for it; `retrying`: the running run retries, so a click during it (a double tap) asks for no second retry.
+func queuesRetry(pending: Bool, retrying: Bool, retryPaused: Bool) -> Bool {
+    pending || (retryPaused && !retrying)
+}
+
 func collectArgs(retryPaused: Bool) -> String {
     retryPaused ? "collect --emit-alerts --retry-paused" : "collect --emit-alerts"
 }

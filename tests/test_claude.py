@@ -552,6 +552,19 @@ class RefreshTest(unittest.TestCase):
             with self.subTest(wait=wait, kw=kw):
                 self.assertEqual(self.refresh(paused_row(since, wait), **kw)[0], retry_failed(want))
 
+    def test_huge_wait_capped(self):
+        """WDRC-101: a stored wait above RETRY_MAX (corrupt or hand-edited) counts as RETRY_MAX, so the timer still
+        retries."""
+        install_fake_claude(self.env, stdout=USAGE)
+        fields, kept, message = self.refresh(paused_row(NOW - 60, 10 ** 9))
+        self.assertEqual((fields, kept), (KEPT_DISABLED, True))
+        self.assertIn("next retry in 358 min", message)
+        fields, kept, message = self.refresh(paused_row(NOW - 6 * HOUR + 60, 10 ** 9))
+        self.assertEqual((kept, message), (False, None))
+        self.assertIsNone(fields["usage_disabled_version"])
+        install_fake_claude(self.env, stdout="")
+        self.assertEqual(self.refresh(paused_row(NOW - 6 * HOUR + 60, 10 ** 9))[0], retry_failed(6 * HOUR))
+
     def test_failed_click_retry_doubles(self):
         install_fake_claude(self.env, stdout="50% used\n")
         fields, _, _ = self.refresh(paused_row(NOW - 60, 1200), retry_paused=True)
