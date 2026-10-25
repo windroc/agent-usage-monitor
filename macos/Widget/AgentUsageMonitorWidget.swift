@@ -117,7 +117,7 @@ struct AccountList: View {
                 } else {
                     if row.bars.isEmpty {
                         HStack(spacing: 8) {
-                            title(row.title)
+                            title(row.title, stale: row.stale)
                             if let notice = row.notice { self.notice(notice) }
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -126,7 +126,7 @@ struct AccountList: View {
                     ForEach(row.bars.indices, id: \.self) { j in
                         let bar = row.bars[j]
                         HStack(spacing: 8) {
-                            title(j == 0 ? row.title : "")
+                            title(j == 0 ? row.title : "", stale: j == 0 && row.stale)
                             BarRow(bar: bar, client: row.client)
                         }
                         .frame(height: Metrics.row)
@@ -158,10 +158,10 @@ struct AccountList: View {
     }
 
     // Compact: just wider than `claude` in the title font (49 pt), so the bars get the rest;
-    // while a stale row shows, wide enough for `⚠ claude` (67 pt), keeping the columns aligned.
+    // while a stale row shows, wide enough for the triangle and `claude`, keeping the columns aligned.
     private var titleWidth: CGFloat {
         guard compact else { return width * 0.34 }
-        return display.rows.contains { $0.title.hasPrefix("⚠") } ? 68 : 52
+        return display.rows.contains { $0.stale } ? 68 : 52
     }
     private let gap = 6.0
     /// Compact: the 5H and the 7D column, each a bar with its reset under its right end.
@@ -172,7 +172,7 @@ struct AccountList: View {
     @ViewBuilder private func compactRow(_ row: DisplayRow) -> some View {
         let bars = ["5H", "7D"].map { label in row.bars.first { $0.label == label } }
         HStack(spacing: gap) {
-            title(row.title)
+            title(row.title, stale: row.stale)
             if let notice = row.notice {
                 self.notice(notice).frame(width: 2 * slot + gap, alignment: .leading)
             } else {
@@ -203,13 +203,21 @@ struct AccountList: View {
         }
     }
 
-    private func title(_ s: String) -> some View {
-        // The same size as the percent: who first, then the number.
-        Text(s).font(.system(size: 15, weight: .bold)).lineLimit(1).truncationMode(.tail)
-            .frame(width: titleWidth, alignment: .leading)
+    /// The same size as the percent: who first, then the number. Stale (WDRC-98): a red triangle leads, so a long
+    /// title loses its tail, not the triangle.
+    private func title(_ s: String, stale: Bool = false) -> some View {
+        HStack(spacing: 3) {
+            if stale {
+                Image(systemName: "exclamationmark.triangle.fill").font(.system(size: 12)).foregroundStyle(.red)
+                    .fixedSize()
+            }
+            Text(s).font(.system(size: 15, weight: .bold)).lineLimit(1).truncationMode(.tail)
+        }
+        .frame(width: titleWidth, alignment: .leading)
     }
 
-    /// Needs login (TASK-873): yellow like a warning bar, where the bars would be.
+    /// Needs login (TASK-873) or a stale row's reason (WDRC-98): yellow like a warning bar, where the bars would be;
+    /// a long one loses its tail.
     private func notice(_ s: String) -> some View {
         Text(s).font(.system(size: 13, weight: .semibold)).foregroundStyle(.yellow).lineLimit(1).truncationMode(.tail)
     }

@@ -15,18 +15,18 @@ let t = 1_792_166_400
 
 func row(_ name: String, five: Int?, seven: Int?, available: Bool?, client: String? = "claude",
          stale: Bool = false, source: String = "app-server", resets: (Int?, Int?) = (nil, nil),
-         account: String? = nil, needsLogin: Bool? = nil) -> Row {
+         account: String? = nil, needsLogin: Bool? = nil, error: String? = nil) -> Row {
     Row(name: name, client: client, account: account, available: available,
         fiveHour: UsageWindow(usedPercent: five, resetsAt: resets.0),
         sevenDay: UsageWindow(usedPercent: seven, resetsAt: resets.1),
-        source: source, stale: stale, needsLogin: needsLogin)
+        source: source, stale: stale, needsLogin: needsLogin, error: error)
 }
 
 func show(_ accounts: [Row]) -> [DisplayRow] {
     rows(Snapshot(generatedAt: t, accounts: accounts), now: t)
 }
 
-// rows_sample: 5H above 7D; the title is the client, not the name, and starts with ⚠ when stale; client carried for the colour
+// rows_sample: 5H above 7D; the title is the client, not the name, marked when stale; client carried for the colour
 check("rows_sample", show([
     row("personal", five: 42, seven: 61, available: true, account: "you@example.com"),
     row("claude-work", five: 0, seven: 20, available: true, stale: true),
@@ -34,7 +34,8 @@ check("rows_sample", show([
 ]), [
     DisplayRow(title: "claude", client: "claude", account: "you@example.com",
                bars: [Bar(label: "5H", percent: 42), Bar(label: "7D", percent: 61)]),
-    DisplayRow(title: "⚠ claude", client: "claude", bars: [Bar(label: "5H", percent: 0), Bar(label: "7D", percent: 20)]),
+    DisplayRow(title: "claude", client: "claude", bars: [Bar(label: "5H", percent: 0), Bar(label: "7D", percent: 20)],
+               stale: true),
     DisplayRow(title: "codex", client: "codex", bars: [Bar(label: "5H", percent: 15), Bar(label: "7D", percent: 33)]),
 ])
 check("zero_accounts", show([]), [])
@@ -55,11 +56,35 @@ for (at, name) in [(nil, "nil"), (t, "now"), (t - 60, "past")] as [(Int?, String
     check("reset_text \(name)", resetText(at, now: t), nil)
 }
 
-// stale_title: ⚠ leads, so cutting a long title's tail keeps it
-check("stale_title", show([row("claude-personal-backup", five: 1, seven: 2, available: true, stale: true)]).map(\.title),
-      ["⚠ claude"])
+// stale_title (WDRC-98): the red triangle is drawn beside the title, so the text no longer starts with ⚠
+let staleTitle = show([row("claude-personal-backup", five: 1, seven: 2, available: true, stale: true)])
+check("stale_title", [staleTitle[0].title], ["claude"])
+check("stale_title_marked", [staleTitle[0].stale], [true])
 
-// needs_login (TASK-873): the client without ⚠, the notice instead of the bars, the account kept; false is a normal row
+// stale_error (WDRC-98): the reason replaces the bars, like the login notice; the triangle and account stay
+let reason = "/usage output not recognized, paused for claude 2.1.302"
+check("stale_error", show([row("a", five: 40, seven: 10, available: true, stale: true, source: "cache",
+                               resets: (t + 60, t + 120), account: "you@example.com", error: reason)]),
+      [DisplayRow(title: "claude", client: "claude", account: "you@example.com", bars: [], notice: reason, stale: true)])
+// no_data_error: no values yet (source none, never stale): the reason, without the triangle
+let noData = show([row("a", five: nil, seven: nil, available: nil, client: "codex", source: "none",
+                       error: "cannot start codex: ENOENT")])
+check("no_data_error", noData,
+      [DisplayRow(title: "codex", client: "codex", bars: [], notice: "cannot start codex: ENOENT")])
+check("no_data_error_unmarked", noData.map(\.stale), [false])
+// stale_no_error_keeps_bars: an older snapshot without error keeps the bars, with the triangle
+check("stale_no_error_keeps_bars", show([row("a", five: 3, seven: 4, available: true, stale: true, source: "cache")]),
+      [DisplayRow(title: "claude", client: "claude", bars: [Bar(label: "5H", percent: 3), Bar(label: "7D", percent: 4)],
+                  stale: true)])
+// fresh_error_keeps_bars: values under 6 h old stay; the reason is only in the snapshot and the log
+check("fresh_error_keeps_bars", show([row("a", five: 3, seven: 4, available: true, source: "cache", error: "timed out")]),
+      [DisplayRow(title: "claude", client: "claude", bars: [Bar(label: "5H", percent: 3), Bar(label: "7D", percent: 4)])])
+// needs_login_ignores_error: the login notice, no triangle, whatever stale and error say
+check("needs_login_ignores_error", show([row("a", five: 1, seven: 2, available: true, stale: true, source: "cache",
+                                             needsLogin: true, error: "timed out")]),
+      [DisplayRow(title: "claude", client: "claude", bars: [], notice: loginNotice)])
+
+// needs_login (TASK-873): the client without the triangle, the notice instead of the bars, the account kept; false is a normal row
 let login = show([row("a", five: 40, seven: 10, available: true, stale: true, resets: (t + 60, t + 120),
                       account: "you@example.com", needsLogin: true),
                   row("b", five: 1, seven: 2, available: true, needsLogin: false)])
@@ -192,6 +217,13 @@ let loginShot = [login[0], shot[1], shot[2]]
 check("fit_compact_needs_login", fit(loginShot, height: 155 - 2 * 16, compact: true), Display(rows: loginShot, more: 0))
 check("fit_compact_needs_login_exact", fit(loginShot, height: 3 * (r + z) + 2 * cd, compact: true),
       Display(rows: loginShot, more: 0))
+// fit_compact_error (WDRC-98): a reason row with an account keeps its two lines too; large gives it one line plus the account
+let errorRow = show([row("a", five: 1, seven: 2, available: true, stale: true, source: "cache", account: "you@example.com",
+                         error: reason)])[0]
+let errorShot = [errorRow, shot[1], shot[2]]
+check("fit_compact_error", fit(errorShot, height: 155 - 2 * 16, compact: true), Display(rows: errorShot, more: 0))
+check("fit_compact_error_exact", fit(errorShot, height: 3 * (r + z) + 2 * cd, compact: true), Display(rows: errorShot, more: 0))
+check("fit_error_large", fit([errorRow], height: r + z), Display(rows: [errorRow], more: 0))
 check("fit_compact_no_second_line", fit(bare, height: 3 * r + 2 * cd, compact: true), Display(rows: bare, more: 0))
 check("fit_compact_no_second_line_short", fit(bare, height: 3 * r + 2 * cd - 1, compact: true),
       Display(rows: Array(bare.prefix(2)), more: 1))
@@ -224,7 +256,9 @@ let valid = load("""
    "needs_login": false},
   {"name": "old", "five_hour": null, "seven_day": null},
   {"name": "mail", "client": "claude", "account": "you@example.com", "five_hour": null, "seven_day": null,
-   "needs_login": true}],
+   "needs_login": true},
+  {"name": "late", "client": "claude", "five_hour": {"used_percent": 5, "resets_at": null}, "seven_day": null,
+   "source": "cache", "stale": true, "error": "timed out"}],
  "summary": {"available": [], "next": {"name": "codex", "at": \(t + 3600)}},
  "notified": [{"name": "codex", "window": "seven_day", "kind": "full", "resets_at": \(t + 3600), "sent_at": \(t - 120)}]}
 """)
@@ -232,7 +266,9 @@ check("load_valid", valid.map { rows($0, now: t) }, [
     DisplayRow(title: "codex", client: "codex", bars: [Bar(label: "7D", percent: 93, reset: "resets: 1h 0m")]),
     DisplayRow(title: "old", client: nil, bars: []),
     DisplayRow(title: "claude", client: "claude", account: "you@example.com", bars: [], notice: loginNotice),
+    DisplayRow(title: "claude", client: "claude", bars: [], notice: "timed out", stale: true),
 ])
+check("load_error_field", valid.map { $0.accounts.map(\.error) }, [nil, nil, nil, "timed out"])
 
 // alertLines (macos/Host/Alerts.swift): only `AUM-ALERT ` lines with a JSON string `text`
 func alertTexts(_ output: Data) -> [String] { alertLines(output).map(\.text) }
