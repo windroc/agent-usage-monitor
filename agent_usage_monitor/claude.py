@@ -149,9 +149,11 @@ def _logged_out(probe_dir, env, timeout):
 
 
 def _wait(row):
-    """The row's wait from usage_disabled_at to its next retry (usage_retry_after_s), None when unset or invalid."""
+    """The row's wait from usage_disabled_at to its next retry (usage_retry_after_s), None when unset or invalid.
+
+    At most RETRY_MAX, so a corrupt or hand-edited wait cannot stop the timer retry (WDRC-101)."""
     wait = row.get("usage_retry_after_s")
-    return wait if type(wait) is int and wait > 0 else None
+    return min(wait, RETRY_MAX) if type(wait) is int and wait > 0 else None
 
 
 def _next(seconds):
@@ -167,10 +169,10 @@ def refresh(name, row, state_dir, environ, config_dir=None, now=None, timeout=TI
     An `unrecognized` result disables it only as the DISABLE_AFTER-th in a row on one claude version
     (unrecognized_count, unrecognized_version); a success or a disable resets the count (WDRC-97).
     A disabled probe (usage_disabled_version) runs once more when retry_paused (a widget click) or its next retry is
-    due: usage_retry_after_s, less RETRY_SLACK, after usage_disabled_at, when it paused or last retried; a pause
-    without a valid schedule, or one ahead of now, is due. A success or `auth` then ends the pause as usual and
-    clears its schedule; any other result keeps it at once, with no count, and doubles the wait up to RETRY_MAX
-    (WDRC-100).
+    due: usage_retry_after_s, at most RETRY_MAX (WDRC-101), less RETRY_SLACK, after usage_disabled_at, when it
+    paused or last retried; a pause without a valid schedule, or one ahead of now, is due. A success or `auth` then
+    ends the pause as usual and clears its schedule; any other result keeps it at once, with no count, and doubles
+    the wait up to RETRY_MAX (WDRC-100).
     An unrecognized result or a disable, new or kept, clears needs_login: auth status has just said the account
     is not logged out. Every result but a throttled skip sets error: the failure's reason, or None (WDRC-98).
     """
