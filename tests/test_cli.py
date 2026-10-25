@@ -11,8 +11,8 @@ from tests.helpers import (BIN, Env, claude_calls, install_fake_claude, install_
                            received, window)
 
 ROW_KEYS = {"name", "client", "dir", "available", "available_at", "five_hour", "seven_day",
-            "fetched_at", "source", "stale", "usage_disabled_version", "unrecognized_count", "unrecognized_version",
-            "needs_login", "error", "account"}
+            "fetched_at", "source", "stale", "usage_disabled_version", "usage_disabled_at", "usage_retry_after_s",
+            "unrecognized_count", "unrecognized_version", "needs_login", "error", "account"}
 
 
 class CollectTest(unittest.TestCase):
@@ -103,8 +103,9 @@ class CollectTest(unittest.TestCase):
             "five_hour": {"used_percent": None, "resets_at": None},
             "seven_day": {"used_percent": None, "resets_at": None},
             "fetched_at": None, "source": "none", "stale": False, "usage_disabled_version": None,
-            "unrecognized_count": 0, "unrecognized_version": None, "needs_login": False,
-            "error": "cannot start claude: ENOENT", "account": None})
+            "usage_disabled_at": None, "usage_retry_after_s": None, "unrecognized_count": 0,
+            "unrecognized_version": None, "needs_login": False, "error": "cannot start claude: ENOENT",
+            "account": None})
 
     def test_claude_row_recomputed(self):
         self.env.mkdir(".claude")
@@ -288,6 +289,22 @@ class CollectTest(unittest.TestCase):
                 self.collect()
                 self.assertEqual(self.row("claude")["source"], "usage")
                 self.assertEqual(claude_calls(self.env)[-1]["env"]["PATH"], seen)
+
+
+class MainTest(unittest.TestCase):
+    def test_retry_paused_flag(self):
+        """WDRC-100: `collect --retry-paused` (a widget click) asks collect to retry paused Claude probes."""
+        for argv, retry in ((["collect", "--emit-alerts", "--retry-paused"], True),
+                            (["collect", "--emit-alerts"], False), (["collect", "--retry-paused"], True)):
+            with self.subTest(argv=argv), mock.patch.object(signal, "signal"), \
+                    mock.patch.object(cli, "collect", return_value=0) as collect:
+                self.assertEqual(cli.main(argv), 0)
+                collect.assert_called_once_with(os.environ, "--emit-alerts" in argv, retry)
+
+    def test_help_lists_retry_paused(self):
+        r = subprocess.run(["/usr/bin/python3", BIN, "collect", "--help"], capture_output=True, text=True, timeout=60)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("--retry-paused", r.stdout)
 
 
 class EmitAlertsTest(unittest.TestCase):

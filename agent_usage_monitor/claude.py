@@ -21,6 +21,10 @@ ARGS = ["-p", "--no-session-persistence", "--strict-mcp-config", "--settings",
         '{"remoteControlAtStartup":false,"disableAllHooks":true}', "--model", "sonnet", "--effort", "low", "/usage"]
 UNKNOWN_VERSION = "unknown"
 DISABLE_AFTER = 3  # unrecognized outputs in a row on one claude version (WDRC-97)
+# a disabled probe runs once more this long after its pause started; each failed retry doubles the wait (WDRC-100)
+RETRY_FIRST = 300
+RETRY_MAX = 6 * 3600
+RETRY_SLACK = 60  # due this early, so a 300 s LaunchAgent run that starts a little early still retries (as THROTTLE)
 _UNSAFE = re.compile(r"[^A-Za-z0-9._-]")
 _VERSION = re.compile(r"\d{1,6}\.\d{1,6}\.\d{1,6}\S{0,30}( \(Claude Code\))?")  # at most 64 chars
 DESCRIPTIONS = {
@@ -144,14 +148,29 @@ def _logged_out(probe_dir, env, timeout):
     return isinstance(status, dict) and status.get("loggedIn") is False
 
 
+def _wait(row):
+    """The row's wait from usage_disabled_at to its next retry (usage_retry_after_s), None when unset or invalid."""
+    wait = row.get("usage_retry_after_s")
+    return wait if type(wait) is int and wait > 0 else None
+
+
+def _next(seconds):
+    return "next retry in %d min or on a widget click" % -(-seconds // 60)
+
+
 def refresh(name, row, state_dir, environ, config_dir=None, now=None, timeout=TIMEOUT,
-            version_timeout=VERSION_TIMEOUT):
+            version_timeout=VERSION_TIMEOUT, retry_paused=False):
     """Probe one account; return (fields to merge, kept, stderr line or None).
 
     kept: the row keeps its snapshot values (store.write's failed set). An `auth` result never disables the
     probe and clears an earlier disable (TASK-873), so logging in recovers the account on the next run.
     An `unrecognized` result disables it only as the DISABLE_AFTER-th in a row on one claude version
     (unrecognized_count, unrecognized_version); a success or a disable resets the count (WDRC-97).
+    A disabled probe (usage_disabled_version) runs once more when retry_paused (a widget click) or its next retry is
+    due: usage_retry_after_s, less RETRY_SLACK, after usage_disabled_at, when it paused or last retried; a pause
+    without a valid schedule, or one ahead of now, is due. A success or `auth` then ends the pause as usual and
+    clears its schedule; any other result keeps it at once, with no count, and doubles the wait up to RETRY_MAX
+    (WDRC-100).
     An unrecognized result or a disable, new or kept, clears needs_login: auth status has just said the account
     is not logged out. Every result but a throttled skip sets error: the failure's reason, or None (WDRC-98).
     """
@@ -171,23 +190,35 @@ def refresh(name, row, state_dir, environ, config_dir=None, now=None, timeout=TI
         return failed(reason, reason)
     env = _environment(environ, probe_dir, config_dir)
     # the login notice is its reason
-    auth = failed(None, "auth: " + DESCRIPTIONS["auth"], needs_login=True, usage_disabled_version=None)
+    auth = failed(None, "auth: " + DESCRIPTIONS["auth"], needs_login=True, usage_disabled_version=None,
+                  usage_disabled_at=None, usage_retry_after_s=None)
 
     disabled = row.get("usage_disabled_version")
+    retry = False
+    since, wait = row.get("usage_disabled_at"), _wait(row)
+    # a failed retry keeps the pause and doubles its wait; an old pause without one starts at RETRY_FIRST
+    backoff = min(2 * (wait or RETRY_FIRST), RETRY_MAX)
+
+    def kept_paused(log):
+        return failed(PAUSED, "retry: %s; probe stays disabled for %s; %s" % (log, disabled, _next(backoff)),
+                      needs_login=False, usage_disabled_at=now, usage_retry_after_s=backoff)
+
     if disabled is not None:
         current = _version(probe_dir, env, version_timeout)
         if current is None or current == disabled:
             # logged out explains the output that disabled it (before TASK-873 that was `unrecognized`)
             if _logged_out(probe_dir, env, version_timeout):
                 return auth
-            return failed(PAUSED, "probe disabled for %s; delete usage_disabled_version from the "
-                          "snapshot to retry" % disabled, needs_login=False)
+            if not retry_paused and type(since) is int and wait and 0 <= now - since < wait - RETRY_SLACK:
+                return failed(PAUSED, "probe disabled for %s; %s"
+                              % (disabled, _next(since + wait - RETRY_SLACK - now)), needs_login=False)
+            retry = True
 
     try:
         out, err, code = _run(ARGS, probe_dir, env, timeout)
     except OSError as e:
         reason = "cannot start claude: %s" % procs.reason(e)
-        return failed(reason, reason)
+        return kept_paused(reason) if retry else failed(reason, reason)
     try:
         parsed = claude_usage.parse(out + "\n" + err)
     except claude_usage.UsageError as e:
@@ -201,14 +232,16 @@ def refresh(name, row, state_dir, environ, config_dir=None, now=None, timeout=TI
         kind = "auth"
     if kind is None:
         fields = dict(claude_usage.make_windows(parsed, now), fetched_at=now, source="usage",
-                      usage_disabled_version=None, unrecognized_count=0, unrecognized_version=None, needs_login=False,
-                      error=None)
+                      usage_disabled_version=None, usage_disabled_at=None, usage_retry_after_s=None,
+                      unrecognized_count=0, unrecognized_version=None, needs_login=False, error=None)
         return fields, False, None
     if kind == "auth":
         return auth
     if kind != "unrecognized":
-        reason = _timeout_reason(code) if kind == "timeout" else REASONS[kind]
-        return failed(reason, "%s: %s" % (kind, DESCRIPTIONS[kind]))
+        log = "%s: %s" % (kind, DESCRIPTIONS[kind])
+        if retry:
+            return kept_paused(log)
+        return failed(_timeout_reason(code) if kind == "timeout" else REASONS[kind], log)
     path = capture_path(probe_dir, name)
     try:
         _save_capture(path, out, err)
@@ -216,19 +249,24 @@ def refresh(name, row, state_dir, environ, config_dir=None, now=None, timeout=TI
     except OSError as e:
         capture = "raw output not saved to %s: %s" % (path, procs.reason(e))
     version = _version(probe_dir, env, version_timeout) or UNKNOWN_VERSION
+    fields = {"usage_disabled_version": version, "usage_disabled_at": now,
+              "usage_retry_after_s": backoff if retry else RETRY_FIRST, "unrecognized_count": 0,
+              "unrecognized_version": None, "needs_login": False}
+    shown = "version unknown" if version == UNKNOWN_VERSION else version
+    if retry:
+        return failed(PAUSED, "retry: output not recognized; probe disabled again for %s; %s; %s"
+                      % (shown, _next(backoff), capture), **fields)
     count = row.get("unrecognized_count")
     count = count + 1 if type(count) is int and row.get("unrecognized_version") == version else 1
     if count < DISABLE_AFTER:
         return failed("/usage output not recognized (%d of %d)" % (count, DISABLE_AFTER),
                       "unrecognized: output not recognized (%d of %d on %s); %s"
-                      % (count, DISABLE_AFTER, "version unknown" if version == UNKNOWN_VERSION else version, capture),
+                      % (count, DISABLE_AFTER, shown, capture),
                       unrecognized_count=count, unrecognized_version=version, usage_disabled_version=None,
-                      needs_login=False)
-    fields = {"usage_disabled_version": version, "unrecognized_count": 0, "unrecognized_version": None,
-              "needs_login": False}
+                      usage_disabled_at=None, usage_retry_after_s=None, needs_login=False)
     message = "unrecognized: output not recognized %d times; " % count
     if version == UNKNOWN_VERSION:
-        return failed(PAUSED, message + "version unknown, probe disabled until claude --version answers or "
-                      "usage_disabled_version is deleted from the snapshot; " + capture, **fields)
-    return failed(PAUSED, message + "probe disabled for %s until claude changes version; %s"
-                  % (version, capture), **fields)
+        return failed(PAUSED, message + "version unknown, probe disabled until claude --version answers; %s; %s"
+                      % (_next(RETRY_FIRST), capture), **fields)
+    return failed(PAUSED, message + "probe disabled for %s until claude changes version; %s; %s"
+                  % (version, _next(RETRY_FIRST), capture), **fields)

@@ -1,5 +1,6 @@
 import argparse
 import concurrent.futures
+import functools
 import json
 import os
 import signal
@@ -61,7 +62,7 @@ def write_accounts(environ, text):
     return 0
 
 
-def collect(environ, emit_alerts=False):
+def collect(environ, emit_alerts=False, retry_paused=False):
     path = environ.get("PATH", "")
     local_bin = os.path.join(accounts.home(environ), ".local", "bin")
     if local_bin not in path.split(os.pathsep):
@@ -82,8 +83,8 @@ def collect(environ, emit_alerts=False):
         if account.client == "codex":
             jobs[account.name] = (_codex, account, environ)
         else:
-            jobs[account.name] = (claude.refresh, account.name, rows.get(account.name, {}), state, environ,
-                                  claude.config_dir_of(account, environ))
+            jobs[account.name] = (functools.partial(claude.refresh, retry_paused=retry_paused), account.name,
+                                  rows.get(account.name, {}), state, environ, claude.config_dir_of(account, environ))
     updates, failed = {}, set()
     # FR-14: one thread per account, so a stuck probe holds up only its own row
     interrupted = None
@@ -116,6 +117,8 @@ def main(argv=None):
     sub = parser.add_subparsers(dest="command", required=True)
     p = sub.add_parser("collect", help="read every account's limits and write the snapshot")
     p.add_argument("--emit-alerts", action="store_true", help="decide alerts and print each as an AUM-ALERT line")
+    p.add_argument("--retry-paused", action="store_true",
+                   help="probe paused Claude accounts once (a widget click, WDRC-100)")
     sub.add_parser("record-alerts", help="record the AUM-ALERT lines on stdin as sent (the host, after posting them)")
     sub.add_parser("read-accounts", help="print the account list as the settings window shows it, as one JSON line")
     sub.add_parser("write-accounts", help="check and write the settings window's edit from stdin (exit 1: problems)")
@@ -127,4 +130,4 @@ def main(argv=None):
         return write_accounts(os.environ, sys.stdin.read())
     if args.command == "record-alerts":
         return record_alerts(os.environ, sys.stdin.read().splitlines())
-    return collect(os.environ, args.emit_alerts)
+    return collect(os.environ, args.emit_alerts, args.retry_paused)

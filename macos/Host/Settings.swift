@@ -12,6 +12,16 @@ func opensSettings(xpcServiceName: String?, urls: [URL]) -> Bool {
     return urls.contains { $0.scheme == "agent-usage-monitor" && $0.host == "settings" }
 }
 
+/// WDRC-100: a widget click (a URL that does not open settings) also retries paused Claude probes; launchd's runs (no
+/// URL) and the settings window's timer and Save do not.
+func retriesPaused(urls: [URL]) -> Bool {
+    !urls.isEmpty && !opensSettings(xpcServiceName: nil, urls: urls)
+}
+
+func collectArgs(retryPaused: Bool) -> String {
+    retryPaused ? "collect --emit-alerts --retry-paused" : "collect --emit-alerts"
+}
+
 /// One account; `original` is its object in the file as JSON, so write-accounts keeps the keys the window does not show.
 struct AccountRow: Codable, Identifiable, Equatable {
     var id = UUID()
