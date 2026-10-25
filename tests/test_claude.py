@@ -281,7 +281,7 @@ class RefreshTest(unittest.TestCase):
         _, row = self.run_from(fresh_row(), 3)
         self.assertEqual(row["usage_disabled_version"], "2.1.302 (Claude Code)")
 
-        fields, kept, message = self.refresh(row, now=NOW + 899)  # 1 s before the first retry
+        fields, kept, message = self.refresh(row, now=NOW + 839)  # 1 s before the first retry is due
         self.assertEqual((fields, kept), (KEPT_DISABLED, True))
         self.assertIn("probe disabled for 2.1.302 (Claude Code)", message)
         # logged in: still disabled, without running /usage
@@ -496,8 +496,9 @@ class RefreshTest(unittest.TestCase):
 
     def test_timer_no_retry_before_wait(self):
         install_fake_claude(self.env, stdout=USAGE)
-        for since, wait, left in ((NOW - 299, 300, 1), (NOW - 60, 300, 4), (NOW, 300, 5), (NOW - 61, 600, 9),
-                                  (NOW - 6 * HOUR + 1, 6 * HOUR, 1)):
+        # due 60 s before the wait ends, as THROTTLE is 240 s under the LaunchAgent's 300 s
+        for since, wait, left in ((NOW - 239, 300, 1), (NOW - 60, 300, 3), (NOW, 300, 4), (NOW - 61, 600, 8),
+                                  (NOW - 6 * HOUR + 61, 6 * HOUR, 1)):
             with self.subTest(since=since, wait=wait):
                 fields, kept, message = self.refresh(paused_row(since, wait))
                 self.assertEqual((fields, kept), (KEPT_DISABLED, True))
@@ -508,21 +509,34 @@ class RefreshTest(unittest.TestCase):
     def test_timer_retry_when_due(self):
         """A retry that parses ends the pause and clears its schedule."""
         install_fake_claude(self.env, stdout=USAGE)
-        for since, wait in ((NOW - 300, 300), (NOW - 400, 300), (NOW - 6 * HOUR, 6 * HOUR)):
+        for since, wait in ((NOW - 240, 300), (NOW - 300, 300), (NOW - 400, 300), (NOW - 6 * HOUR + 60, 6 * HOUR)):
             with self.subTest(since=since, wait=wait):
                 fields, kept, message = self.refresh(paused_row(since, wait))
                 self.assertEqual((kept, message), (False, None))
                 self.assertEqual((fields["usage_disabled_version"], fields["usage_disabled_at"],
                                   fields["usage_retry_after_s"]), (None, None, None))
-        self.assertEqual([c["argv"][-1] for c in claude_calls(self.env)].count("/usage"), 3)
+        self.assertEqual([c["argv"][-1] for c in claude_calls(self.env)].count("/usage"), 4)
+
+    def test_launchagent_run_1s_early(self):
+        """A LaunchAgent run a second short of 5 minutes after the pause still takes the first retry, and the next
+        retry stays on its 10-minute schedule."""
+        install_fake_claude(self.env, stdout="50% used\n")
+        fields, kept, message = self.refresh(paused_row(NOW, 300), now=NOW + 299)
+        self.assertEqual((fields, kept), (disabled(at=NOW + 299, wait=600), True))
+        self.assertIn("retry: output not recognized", message)
+        row = paused_row(NOW + 299, 600)
+        # two runs 300 s apart, each a second early: the second one retries
+        self.assertEqual(self.refresh(row, now=NOW + 299 + 299)[0], KEPT_DISABLED)
+        self.assertEqual(self.refresh(row, now=NOW + 299 + 599)[0], disabled(at=NOW + 898, wait=1200))
+        self.assertEqual([c["argv"][-1] for c in claude_calls(self.env)].count("/usage"), 2)
 
     def test_backoff_doubles_to_cap(self):
         """Each failed timer retry doubles the wait, from 5 minutes up to 6 hours."""
         install_fake_claude(self.env, stdout="50% used\n")
         row, now, waits = paused_row(NOW, 300), NOW, []
         for _ in range(9):
-            self.assertEqual(self.refresh(row, now=now + row["usage_retry_after_s"] - 1)[0], KEPT_DISABLED)
-            now += row["usage_retry_after_s"]
+            self.assertEqual(self.refresh(row, now=now + row["usage_retry_after_s"] - 61)[0], KEPT_DISABLED)
+            now += row["usage_retry_after_s"] - 60
             fields, kept, _ = self.refresh(row, now=now)
             self.assertEqual((fields["usage_disabled_at"], kept), (now, True))
             row = dict(row, **fields)

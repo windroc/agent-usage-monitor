@@ -24,6 +24,7 @@ DISABLE_AFTER = 3  # unrecognized outputs in a row on one claude version (WDRC-9
 # a disabled probe runs once more this long after its pause started; each failed retry doubles the wait (WDRC-100)
 RETRY_FIRST = 300
 RETRY_MAX = 6 * 3600
+RETRY_SLACK = 60  # due this early, so a 300 s LaunchAgent run that starts a little early still retries (as THROTTLE)
 _UNSAFE = re.compile(r"[^A-Za-z0-9._-]")
 _VERSION = re.compile(r"\d{1,6}\.\d{1,6}\.\d{1,6}\S{0,30}( \(Claude Code\))?")  # at most 64 chars
 DESCRIPTIONS = {
@@ -166,9 +167,10 @@ def refresh(name, row, state_dir, environ, config_dir=None, now=None, timeout=TI
     An `unrecognized` result disables it only as the DISABLE_AFTER-th in a row on one claude version
     (unrecognized_count, unrecognized_version); a success or a disable resets the count (WDRC-97).
     A disabled probe (usage_disabled_version) runs once more when retry_paused (a widget click) or its next retry is
-    due: usage_retry_after_s after usage_disabled_at, when it paused or last retried; a pause without a valid
-    schedule, or one ahead of now, is due. A success or `auth` then ends the pause as usual and clears its schedule;
-    any other result keeps it at once, with no count, and doubles the wait up to RETRY_MAX (WDRC-100).
+    due: usage_retry_after_s, less RETRY_SLACK, after usage_disabled_at, when it paused or last retried; a pause
+    without a valid schedule, or one ahead of now, is due. A success or `auth` then ends the pause as usual and
+    clears its schedule; any other result keeps it at once, with no count, and doubles the wait up to RETRY_MAX
+    (WDRC-100).
     An unrecognized result or a disable, new or kept, clears needs_login: auth status has just said the account
     is not logged out. Every result but a throttled skip sets error: the failure's reason, or None (WDRC-98).
     """
@@ -207,9 +209,9 @@ def refresh(name, row, state_dir, environ, config_dir=None, now=None, timeout=TI
             # logged out explains the output that disabled it (before TASK-873 that was `unrecognized`)
             if _logged_out(probe_dir, env, version_timeout):
                 return auth
-            if not retry_paused and type(since) is int and wait and 0 <= now - since < wait:
-                return failed(PAUSED, "probe disabled for %s; %s" % (disabled, _next(since + wait - now)),
-                              needs_login=False)
+            if not retry_paused and type(since) is int and wait and 0 <= now - since < wait - RETRY_SLACK:
+                return failed(PAUSED, "probe disabled for %s; %s"
+                              % (disabled, _next(since + wait - RETRY_SLACK - now)), needs_login=False)
             retry = True
 
     try:
