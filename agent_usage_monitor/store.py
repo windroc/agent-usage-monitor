@@ -21,7 +21,7 @@ def default_row():
     row = {"available": None, "available_at": None}
     row.update({k: {"used_percent": None, "resets_at": None} for k in derive.WINDOWS})
     row.update(fetched_at=None, source="none", stale=False, usage_disabled_version=None, usage_disabled_at=None,
-               unrecognized_count=0, unrecognized_version=None, needs_login=False, error=None)
+               usage_retry_after_s=None, unrecognized_count=0, unrecognized_version=None, needs_login=False, error=None)
     return row
 
 

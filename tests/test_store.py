@@ -44,8 +44,9 @@ class WriteTest(Base):
         self.assertEqual(self.row("b"), {
             "name": "b", "client": "claude", "dir": "/d/b", "available": None, "available_at": None,
             "five_hour": w(None), "seven_day": w(None), "fetched_at": None, "source": "none",
-            "stale": False, "usage_disabled_version": None, "usage_disabled_at": None, "unrecognized_count": 0,
-            "unrecognized_version": None, "needs_login": False, "error": None, "account": None})
+            "stale": False, "usage_disabled_version": None, "usage_disabled_at": None, "usage_retry_after_s": None,
+            "unrecognized_count": 0, "unrecognized_version": None, "needs_login": False, "error": None,
+            "account": None})
 
     def test_old_row_without_error(self):
         """WDRC-98: a row written before `error` existed reads as no error; a failed run's reason replaces it."""
