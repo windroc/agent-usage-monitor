@@ -13,21 +13,26 @@ A1 = os.path.join(FIXTURES, "claude-usage", "A1.stdout.txt")
 LOGGED_OUT = os.path.join(FIXTURES, "claude-usage", "logged-out.stdout.txt")
 LOGGED_OUT_STATUS = json.dumps({"loggedIn": False, "authMethod": "none", "apiProvider": "firstParty"})
 AUTH_STATUS = ["auth", "status", "--json"]
-AUTH_FIELDS = {"needs_login": True, "usage_disabled_version": None, "error": None}
+AUTH_FIELDS = {"needs_login": True, "usage_disabled_version": None, "usage_disabled_at": None, "error": None}
 VERSION = "2.1.302 (Claude Code)"
 # The row's error while the probe is disabled, for any version (WDRC-98): short enough for the large widget
 PAUSED = "/usage unreadable · paused"
 
 
-def disabled(version=VERSION):
-    """Fields of the disabling result; auth status has just said not logged out."""
-    return {"usage_disabled_version": version, "unrecognized_count": 0, "unrecognized_version": None,
-            "needs_login": False, "error": PAUSED}
+NOW = 1792213644  # 2026-10-17T05:07:24Z, the A1 run
+HOUR = 3600
+
+
+def disabled(version=VERSION, at=NOW):
+    """Fields of the disabling result, its pause started at `at`; auth status has just said not logged out."""
+    return {"usage_disabled_version": version, "usage_disabled_at": at, "unrecognized_count": 0,
+            "unrecognized_version": None, "needs_login": False, "error": PAUSED}
 
 
 # a disabled row kept disabled
 KEPT_DISABLED = {"needs_login": False, "error": PAUSED}
-NOW = 1792213644  # 2026-10-17T05:07:24Z, the A1 run
+# a retry that failed other than unrecognized: still disabled, its pause restarted (WDRC-100)
+RETRY_FAILED = {"needs_login": False, "usage_disabled_at": NOW, "error": PAUSED}
 
 
 def _hour(at):
@@ -48,7 +53,13 @@ def fresh_row(**fields):
 def strike(count, version=VERSION):
     """Fields of the count-th unrecognized output in a row on version, below the disable (WDRC-97)."""
     return {"unrecognized_count": count, "unrecognized_version": version, "usage_disabled_version": None,
-            "needs_login": False, "error": "/usage output not recognized (%d of 3)" % count}
+            "usage_disabled_at": None, "needs_login": False,
+            "error": "/usage output not recognized (%d of 3)" % count}
+
+
+def paused_row(since=NOW - HOUR, version=VERSION, **fields):
+    """A row whose probe was disabled at `since` (WDRC-100: usage_disabled_at)."""
+    return fresh_row(usage_disabled_version=version, usage_disabled_at=since, **fields)
 
 
 class RefreshTest(unittest.TestCase):
@@ -183,7 +194,7 @@ class RefreshTest(unittest.TestCase):
         install_fake_claude(self.env, stdout=USAGE, version_exit=1)
         for value in ("unknown", "/Users/u/secret"):
             with self.subTest(value=value):
-                fields, kept, _ = self.refresh(fresh_row(usage_disabled_version=value))
+                fields, kept, _ = self.refresh(paused_row(version=value))
                 self.assertEqual((fields, kept), ({"needs_login": False, "error": PAUSED}, True))
 
     def test_logged_out(self):
@@ -233,7 +244,8 @@ class RefreshTest(unittest.TestCase):
         self.assertEqual((fields, kept), (strike(1), True))
         self.assertIn(": unrecognized: ", message)
         # a row disabled while still flagged (a snapshot from before this fix) is cleared on its next run
-        fields, kept, message = self.refresh(dict(row, usage_disabled_version=VERSION), now=NOW + 600)
+        fields, kept, message = self.refresh(dict(row, usage_disabled_version=VERSION, usage_disabled_at=NOW),
+                                             now=NOW + 600)
         self.assertEqual((fields, kept), (KEPT_DISABLED, True))
         self.assertIn("probe disabled for 2.1.302 (Claude Code)", message)
 
@@ -288,8 +300,7 @@ class RefreshTest(unittest.TestCase):
                 self.assertNotIn("banner", message)
                 # a disabled row whose version cannot be read stays disabled
                 n = len(claude_calls(self.env))
-                fields, kept, message = self.refresh(fresh_row(usage_disabled_version="2.1.302 (Claude Code)"),
-                                                     version_timeout=1)
+                fields, kept, message = self.refresh(paused_row(), version_timeout=1)
                 self.assertEqual((fields, kept), (KEPT_DISABLED, True))
                 self.assertEqual([c["argv"] for c in claude_calls(self.env)[n:]], [["--version"], AUTH_STATUS])
 
@@ -308,9 +319,10 @@ class RefreshTest(unittest.TestCase):
             self.assertEqual(message, "agent-usage-monitor: claude claude: unrecognized: output not recognized "
                                       "(%d of 3 on 2.1.302 (Claude Code)); raw output in %s" % (count, self.capture))
         fields, kept, message = results[2]
-        self.assertEqual((fields, kept), (disabled(), True))
+        self.assertEqual((fields, kept), (disabled(at=NOW + 600), True))
         self.assertEqual(message, "agent-usage-monitor: claude claude: unrecognized: output not recognized 3 times; "
                                   "probe disabled for 2.1.302 (Claude Code) until claude changes version; "
+                                  "retries on a widget click or 6 h after the pause started; "
                                   "raw output in %s" % self.capture)
         fields, kept, message = results[3]
         self.assertEqual((fields, kept), (KEPT_DISABLED, True))
@@ -327,7 +339,7 @@ class RefreshTest(unittest.TestCase):
         row = dict(row, **fields)
         install_fake_claude(self.env, stdout="50% used\n")
         results, row = self.run_from(row, 3, now=NOW + 900)
-        self.assertEqual([r[0] for r in results], [strike(1), strike(2), disabled()])
+        self.assertEqual([r[0] for r in results], [strike(1), strike(2), disabled(at=NOW + 1500)])
 
     def test_version_change_resets_count(self):
         install_fake_claude(self.env, stdout="50% used\n")
@@ -336,7 +348,7 @@ class RefreshTest(unittest.TestCase):
         install_fake_claude(self.env, stdout="50% used\n", version="2.1.303 (Claude Code)")
         results, row = self.run_from(row, 3, now=NOW + 600)
         new = "2.1.303 (Claude Code)"
-        self.assertEqual([r[0] for r in results], [strike(1, new), strike(2, new), disabled(new)])
+        self.assertEqual([r[0] for r in results], [strike(1, new), strike(2, new), disabled(new, NOW + 1200)])
 
     def test_reenabled_by_version_change_counts_again(self):
         # a disabled row on a new claude version probes again and needs 3 more before it is disabled again
@@ -365,8 +377,9 @@ class RefreshTest(unittest.TestCase):
         results, row = self.run_from(fresh_row(), 3)
         self.assertEqual([r[0] for r in results[:2]], [strike(1, "unknown"), strike(2, "unknown")])
         self.assertIn("(2 of 3 on version unknown)", results[1][2])
-        self.assertEqual(results[2][0], disabled("unknown"))
-        self.assertIn("version unknown, probe disabled until", results[2][2])
+        self.assertEqual(results[2][0], disabled("unknown", NOW + 600))
+        self.assertIn("version unknown, probe disabled until claude --version answers; retries on a widget click",
+                      results[2][2])
 
     def test_capture_file(self):
         """WDRC-97: each unrecognized output's raw stdout and stderr replace <probe>/last-unrecognized-<name>.txt."""
@@ -416,6 +429,98 @@ class RefreshTest(unittest.TestCase):
         install_fake_claude(self.env, stdout=USAGE)
         fields, kept, message = self.refresh(fresh_row(usage_disabled_version="unknown"))
         self.assertEqual((kept, message), (False, None))
+
+    def test_click_retry_success(self):
+        """WDRC-100: a widget click (retry_paused) runs a paused probe once; a parsing output ends the pause."""
+        install_fake_claude(self.env, stdout=USAGE)
+        fields, kept, message = self.refresh(paused_row(unrecognized_count=0, error=PAUSED), retry_paused=True)
+        self.assertEqual((kept, message), (False, None))
+        keys = ("usage_disabled_version", "usage_disabled_at", "unrecognized_count", "unrecognized_version",
+                "needs_login", "error", "source", "fetched_at")
+        self.assertEqual({k: fields[k] for k in keys},
+                         {"usage_disabled_version": None, "usage_disabled_at": None, "unrecognized_count": 0,
+                          "unrecognized_version": None, "needs_login": False, "error": None, "source": "usage",
+                          "fetched_at": NOW})
+        self.assertEqual(fields["five_hour"]["used_percent"], 40)
+        self.assertEqual([c["argv"][-1] for c in claude_calls(self.env)].count("/usage"), 1)
+
+    def test_retry_unrecognized_pauses_again(self):
+        """A retry's unrecognized output pauses again at once, with no 3 more strikes, and restarts the clock."""
+        for kw, since in (({"retry_paused": True}, NOW - HOUR), ({}, NOW - 6 * HOUR)):
+            with self.subTest(kw=kw):
+                install_fake_claude(self.env, stdout="50% used\n")
+                fields, kept, message = self.refresh(paused_row(since), **kw)
+                self.assertEqual((fields, kept), (disabled(), True))
+                self.assertEqual(message, "agent-usage-monitor: claude claude: retry: output not recognized; probe "
+                                          "disabled again for 2.1.302 (Claude Code); retries on a widget click or "
+                                          "6 h after the pause started; raw output in %s" % self.capture)
+                with open(self.capture, encoding="utf-8") as f:
+                    self.assertIn("50% used", f.read())
+        install_fake_claude(self.env, stdout="50% used\n", version_exit=1)
+        fields, _, message = self.refresh(paused_row(version="unknown"), retry_paused=True)
+        self.assertEqual(fields, disabled("unknown"))
+        self.assertIn("probe disabled again for version unknown", message)
+
+    def test_retry_other_failure_keeps_pause(self):
+        """timeout, a non-zero exit, usage_error, loading or a missing claude keep the pause and restart its clock."""
+        for cfg, kind in (({"stdout": ""}, "timeout: "), ({"stdout": "50% used\n", "exit": 1}, "timeout: "),
+                          ({"stdout": "Failed to load usage data: rate limited"}, "usage_error: "),
+                          ({"stdout": "Loading usage data…\n"}, "loading: "), ({"hang": True}, "timeout: ")):
+            with self.subTest(cfg=cfg):
+                install_fake_claude(self.env, **cfg)
+                fields, kept, message = self.refresh(paused_row(), timeout=1, retry_paused=True)
+                self.assertEqual((fields, kept), (RETRY_FAILED, True))
+                self.assertTrue(message.startswith("agent-usage-monitor: claude claude: retry: " + kind), message)
+                self.assertIn("; probe stays disabled for 2.1.302 (Claude Code); retries on a widget click", message)
+
+    def test_retry_claude_missing_keeps_pause(self):
+        fields, kept, message = self.refresh(paused_row(version="unknown"), retry_paused=True)
+        self.assertEqual((fields, kept), (RETRY_FAILED, True))
+        self.assertEqual(message, "agent-usage-monitor: claude claude: retry: cannot start claude: ENOENT; probe stays "
+                                  "disabled for unknown; retries on a widget click or 6 h after the pause started")
+
+    def test_retry_logged_out(self):
+        """A retry whose /usage reads as logged out ends the pause with the login notice, as before WDRC-100."""
+        install_fake_claude(self.env, stdout_file=LOGGED_OUT, auth_status=LOGGED_OUT_STATUS, auth_exit=1)
+        fields, kept, message = self.refresh(paused_row(), retry_paused=True)
+        self.assertEqual((fields, kept), (AUTH_FIELDS, True))
+        self.assertIn(": auth: ", message)
+
+    def test_timer_no_retry_before_6h(self):
+        install_fake_claude(self.env, stdout=USAGE)
+        for since in (NOW - 6 * HOUR + 1, NOW - HOUR, NOW):
+            with self.subTest(since=since):
+                fields, kept, message = self.refresh(paused_row(since))
+                self.assertEqual((fields, kept), (KEPT_DISABLED, True))
+                self.assertEqual(message, "agent-usage-monitor: claude claude: probe disabled for 2.1.302 "
+                                          "(Claude Code); retries on a widget click or 6 h after the pause started")
+        self.assertNotIn("/usage", [c["argv"][-1] for c in claude_calls(self.env)])
+
+    def test_timer_retry_after_6h(self):
+        install_fake_claude(self.env, stdout=USAGE)
+        for since in (NOW - 6 * HOUR, NOW - 7 * HOUR):
+            with self.subTest(since=since):
+                fields, kept, message = self.refresh(paused_row(since))
+                self.assertEqual((kept, message), (False, None))
+                self.assertEqual((fields["usage_disabled_version"], fields["usage_disabled_at"]), (None, None))
+        self.assertEqual([c["argv"][-1] for c in claude_calls(self.env)].count("/usage"), 2)
+
+    def test_pause_without_disabled_at_retries(self):
+        """A pause recorded before WDRC-100 (no usage_disabled_at) counts as over 6 hours old; so does a bad value
+        or one ahead of the clock."""
+        install_fake_claude(self.env, stdout=USAGE)
+        for row in (fresh_row(usage_disabled_version=VERSION), paused_row(None), paused_row("1792213644"),
+                    paused_row(True), paused_row(1.5), paused_row(NOW + 60)):
+            with self.subTest(row=row):
+                fields, kept, _ = self.refresh(row)
+                self.assertFalse(kept)
+                self.assertIsNone(fields["usage_disabled_version"])
+
+    def test_unpaused_retry_flag_no_effect(self):
+        # retry_paused touches only paused rows: the 3-strike count and the throttle stay
+        install_fake_claude(self.env, stdout="50% used\n")
+        self.assertEqual(self.refresh(retry_paused=True)[0], strike(1))
+        self.assertEqual(self.refresh(fresh_row(fetched_at=NOW - 60), retry_paused=True), ({}, True, None))
 
     def test_throttle(self):
         install_fake_claude(self.env, stdout=USAGE, fail=True)

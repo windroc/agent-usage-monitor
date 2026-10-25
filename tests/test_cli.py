@@ -11,8 +11,8 @@ from tests.helpers import (BIN, Env, claude_calls, install_fake_claude, install_
                            received, window)
 
 ROW_KEYS = {"name", "client", "dir", "available", "available_at", "five_hour", "seven_day",
-            "fetched_at", "source", "stale", "usage_disabled_version", "unrecognized_count", "unrecognized_version",
-            "needs_login", "error", "account"}
+            "fetched_at", "source", "stale", "usage_disabled_version", "usage_disabled_at", "unrecognized_count",
+            "unrecognized_version", "needs_login", "error", "account"}
 
 
 class CollectTest(unittest.TestCase):
@@ -103,7 +103,7 @@ class CollectTest(unittest.TestCase):
             "five_hour": {"used_percent": None, "resets_at": None},
             "seven_day": {"used_percent": None, "resets_at": None},
             "fetched_at": None, "source": "none", "stale": False, "usage_disabled_version": None,
-            "unrecognized_count": 0, "unrecognized_version": None, "needs_login": False,
+            "usage_disabled_at": None, "unrecognized_count": 0, "unrecognized_version": None, "needs_login": False,
             "error": "cannot start claude: ENOENT", "account": None})
 
     def test_claude_row_recomputed(self):
