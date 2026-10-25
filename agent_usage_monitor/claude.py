@@ -20,6 +20,8 @@ THROTTLE = 240  # under the LaunchAgent's 300 s, so a run starting a few seconds
 ARGS = ["-p", "--no-session-persistence", "--strict-mcp-config", "--settings",
         '{"remoteControlAtStartup":false,"disableAllHooks":true}', "--model", "sonnet", "--effort", "low", "/usage"]
 UNKNOWN_VERSION = "unknown"
+DISABLE_AFTER = 3  # unrecognized outputs in a row on one claude version (WDRC-97)
+_UNSAFE = re.compile(r"[^A-Za-z0-9._-]")
 _VERSION = re.compile(r"\d{1,6}\.\d{1,6}\.\d{1,6}\S{0,30}( \(Claude Code\))?")  # at most 64 chars
 DESCRIPTIONS = {
     "auth": "not logged in or login expired; run claude and /login",
@@ -63,6 +65,23 @@ def _prepare(state_dir):
         os.unlink(tmp)
         raise
     return os.path.realpath(probe_dir)
+
+
+def capture_path(probe_dir, name):
+    """<probe dir>/last-unrecognized-<name>.txt, each character of name outside [A-Za-z0-9._-] as `_`."""
+    return os.path.join(probe_dir, "last-unrecognized-%s.txt" % _UNSAFE.sub("_", name))
+
+
+def _save_capture(path, out, err):
+    """Replace path (0600) with the raw output; it stays local, never in the snapshot or the log (WDRC-97)."""
+    fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path), prefix=".capture.", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write("--- stdout ---\n%s\n--- stderr ---\n%s\n" % (out, err))
+        os.replace(tmp, path)
+    except BaseException:
+        os.unlink(tmp)
+        raise
 
 
 def _run(args, probe_dir, env, timeout):
@@ -119,7 +138,10 @@ def refresh(name, row, state_dir, environ, config_dir=None, now=None, timeout=TI
 
     kept: the row keeps its snapshot values (store.write's failed set). An `auth` result never disables the
     probe and clears an earlier disable (TASK-873), so logging in recovers the account on the next run.
-    A disable, new or kept, clears needs_login: auth status has just said the account is not logged out.
+    An `unrecognized` result disables it only as the DISABLE_AFTER-th in a row on one claude version
+    (unrecognized_count, unrecognized_version); a success or a disable resets the count (WDRC-97).
+    An unrecognized result or a disable, new or kept, clears needs_login: auth status has just said the account
+    is not logged out.
     """
     now = int(time.time()) if now is None else now
     fetched = row.get("fetched_at")
@@ -160,16 +182,30 @@ def refresh(name, row, state_dir, environ, config_dir=None, now=None, timeout=TI
         kind = "auth"
     if kind is None:
         fields = dict(claude_usage.make_windows(parsed, now), fetched_at=now, source="usage",
-                      usage_disabled_version=None, needs_login=False)
+                      usage_disabled_version=None, unrecognized_count=0, unrecognized_version=None, needs_login=False)
         return fields, False, None
     if kind == "auth":
         return auth
     if kind != "unrecognized":
         return {}, True, prefix + "%s: %s" % (kind, DESCRIPTIONS[kind])
-    version = _version(probe_dir, env, version_timeout)
-    if version is None:
-        return ({"usage_disabled_version": UNKNOWN_VERSION, "needs_login": False}, True,
-                prefix + "unrecognized: output not recognized; version unknown, probe disabled until "
-                "claude --version answers or usage_disabled_version is deleted from the snapshot")
-    return ({"usage_disabled_version": version, "needs_login": False}, True,
-            prefix + "unrecognized: output not recognized; probe disabled for %s until claude changes version" % version)
+    path = capture_path(probe_dir, name)
+    try:
+        _save_capture(path, out, err)
+        capture = "raw output in %s" % path
+    except OSError as e:
+        capture = "raw output not saved to %s: %s" % (path, procs.reason(e))
+    version = _version(probe_dir, env, version_timeout) or UNKNOWN_VERSION
+    count = row.get("unrecognized_count")
+    count = count + 1 if type(count) is int and row.get("unrecognized_version") == version else 1
+    if count < DISABLE_AFTER:
+        return ({"unrecognized_count": count, "unrecognized_version": version, "usage_disabled_version": None,
+                 "needs_login": False}, True,
+                prefix + "unrecognized: output not recognized (%d of %d on %s); %s"
+                % (count, DISABLE_AFTER, "version unknown" if version == UNKNOWN_VERSION else version, capture))
+    fields = {"usage_disabled_version": version, "unrecognized_count": 0, "unrecognized_version": None,
+              "needs_login": False}
+    message = prefix + "unrecognized: output not recognized %d times; " % count
+    if version == UNKNOWN_VERSION:
+        return (fields, True, message + "version unknown, probe disabled until claude --version answers or "
+                "usage_disabled_version is deleted from the snapshot; " + capture)
+    return fields, True, message + "probe disabled for %s until claude changes version; %s" % (version, capture)
