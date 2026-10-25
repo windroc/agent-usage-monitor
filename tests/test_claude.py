@@ -694,6 +694,36 @@ class CollectProbeTest(unittest.TestCase):
         with open(capture, encoding="utf-8") as f:
             self.assertIn("user@example.com", f.read())
 
+    def paused(self, since):
+        """Write a snapshot whose claude row was paused at `since` (WDRC-100)."""
+        os.makedirs(self.env.state, exist_ok=True)
+        with open(self.env.snapshot_path, "w") as f:
+            json.dump({"schema": 1, "accounts": [{"name": "claude", "fetched_at": None, "error": PAUSED,
+                                                  "usage_disabled_version": VERSION, "usage_disabled_at": since}]}, f)
+
+    def test_launchagent_run_keeps_pause(self):
+        """WDRC-100: the LaunchAgent's run (no --retry-paused) leaves a pause under 6 hours old alone."""
+        install_fake_claude(self.env, stdout=USAGE)
+        since = int(time.time()) - HOUR
+        self.paused(since)
+        r = self.collect("--emit-alerts")
+        self.assertIn("probe disabled for 2.1.302 (Claude Code); retries on a widget click", r.stderr)
+        self.assertNotIn("/usage", [c["argv"][-1] for c in claude_calls(self.env)])
+        row = self.row()
+        self.assertEqual((row["usage_disabled_version"], row["usage_disabled_at"], row["error"]),
+                         (VERSION, since, PAUSED))
+
+    def test_click_collect_retries(self):
+        """A widget click's collect --retry-paused probes the paused account once; a parsing output ends the pause."""
+        install_fake_claude(self.env, stdout=USAGE)
+        self.paused(int(time.time()) - HOUR)
+        r = self.collect("--emit-alerts", "--retry-paused")
+        self.assertNotIn("claude claude:", r.stderr)
+        self.assertEqual([c["argv"][-1] for c in claude_calls(self.env)].count("/usage"), 1)
+        row = self.row()
+        self.assertEqual((row["usage_disabled_version"], row["usage_disabled_at"], row["error"], row["source"]),
+                         (None, None, None, "usage"))
+
     def test_no_identity_in_snapshot(self):
         install_fake_claude(self.env, stdout="Account: user@example.com\nOrg: Example Org\n" + USAGE)
         self.collect()

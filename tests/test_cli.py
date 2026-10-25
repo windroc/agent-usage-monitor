@@ -290,6 +290,22 @@ class CollectTest(unittest.TestCase):
                 self.assertEqual(claude_calls(self.env)[-1]["env"]["PATH"], seen)
 
 
+class MainTest(unittest.TestCase):
+    def test_retry_paused_flag(self):
+        """WDRC-100: `collect --retry-paused` (a widget click) asks collect to retry paused Claude probes."""
+        for argv, retry in ((["collect", "--emit-alerts", "--retry-paused"], True),
+                            (["collect", "--emit-alerts"], False), (["collect", "--retry-paused"], True)):
+            with self.subTest(argv=argv), mock.patch.object(signal, "signal"), \
+                    mock.patch.object(cli, "collect", return_value=0) as collect:
+                self.assertEqual(cli.main(argv), 0)
+                collect.assert_called_once_with(os.environ, "--emit-alerts" in argv, retry)
+
+    def test_help_lists_retry_paused(self):
+        r = subprocess.run(["/usr/bin/python3", BIN, "collect", "--help"], capture_output=True, text=True, timeout=60)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("--retry-paused", r.stdout)
+
+
 class EmitAlertsTest(unittest.TestCase):
     """FR-8, Python side: alerts as `AUM-ALERT ` lines on stdout, recorded in notified (FR-1, FR-9) only once the
     host passes the delivered lines to `record-alerts` (TASK-640)."""
