@@ -1,0 +1,2 @@
+<dir-b>/.claude.json
+<dir-b>/plugins/synced/<ORG_ID>_<SYNC_ID>/.last-complete-round

@@ -1,0 +1,16 @@
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+*.egg-info/
+
+# Swift / macOS build
+build/
+.build/
+DerivedData/
+*.app
+*.appex
+xcuserdata/

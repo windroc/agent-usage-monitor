@@ -1,0 +1,8 @@
+{
+  "threshold": 90,
+  "accounts": [
+    {"name": "claude", "client": "claude", "dir": "~/.claude", "account": "you@example.com"},
+    {"name": "claude-work", "client": "claude", "dir": "~/.claude-work", "account": "work@example.com"},
+    {"name": "codex", "client": "codex", "dir": "~/.codex", "account": "you@example.com"}
+  ]
+}

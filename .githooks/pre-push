@@ -1,0 +1,3 @@
+#!/bin/sh
+# NFR-4: refuse a push whose new files, commit messages or author and committer emails hold personal data.
+exec /usr/bin/python3 "$(dirname "$0")/../tests/pii_scan.py" --pre-push "$1"

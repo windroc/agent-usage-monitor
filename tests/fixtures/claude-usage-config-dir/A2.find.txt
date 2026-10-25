@@ -1,0 +1,3 @@
+<dir-a>/.claude.json
+<dir-a>/skills/synced/<ORG_ID>_<SYNC_ID>/.last-complete-round
+<dir-a>/skills/synced/<ORG_ID>_<SYNC_ID>/manifest.json

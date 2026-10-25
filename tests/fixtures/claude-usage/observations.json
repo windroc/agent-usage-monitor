@@ -1,0 +1,322 @@
+{
+  "schema": 1,
+  "claude_version": "2.1.302 (Claude Code)",
+  "account": "default authenticated account; CLAUDE_CONFIG_DIR unset",
+  "quota_criterion": "Latest user decision: own probe session message.usage lines; percentages are reference only.",
+  "probe_setup": {
+    ".claude/settings.local.json": {
+      "disableDeepLinkRegistration": "disable"
+    },
+    ".claude/settings.json": {
+      "hooks": {
+        "SessionStart": [
+          {
+            "hooks": [
+              {
+                "type": "command",
+                "command": "/usr/bin/touch <PROBE>/hook-ran"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    ".mcp.json": {
+      "mcpServers": {
+        "spike-sentinel": {
+          "type": "stdio",
+          "command": "/usr/bin/touch",
+          "args": [
+            "<PROBE>/mcp-ran"
+          ]
+        }
+      }
+    }
+  },
+  "runs": [
+    {
+      "label": "A1",
+      "started_utc": "2026-10-17T05:07:24.915359+00:00",
+      "argv": [
+        "claude",
+        "-p",
+        "--no-session-persistence",
+        "--strict-mcp-config",
+        "--settings",
+        "{\"remoteControlAtStartup\":false,\"disableAllHooks\":true}",
+        "--model",
+        "sonnet",
+        "--effort",
+        "low",
+        "/usage"
+      ],
+      "cwd": "<PROBE>",
+      "environment": {
+        "CLAUDE_CONFIG_DIR": "unset",
+        "ANTHROPIC_*": "removed",
+        "CLAUDE_CODE_OAUTH_TOKEN": "removed",
+        "DISABLE_AUTOUPDATER": "1",
+        "PWD": "<PROBE>"
+      },
+      "stdin": "/dev/null",
+      "stdout_is_tty": false,
+      "timeout_seconds": 30,
+      "exit_code": 0,
+      "timed_out": false,
+      "elapsed_seconds": 7.576,
+      "find_argv": [
+        "/usr/bin/find",
+        "<CLAUDE_DIR>",
+        "<PROBE>",
+        "-newer",
+        "<WORKDIR>/tmp/captures/A1-marker",
+        "-type",
+        "f"
+      ],
+      "find_exit_code": 0,
+      "find_files": [
+        "<CLAUDE_DIR>/plugins/synced/<ORG_ID>_<SYNC_ID>/.last-complete-round",
+        "<CLAUDE_DIR>/projects/<OTHER_PROJECT_5>/<SESSION_ID_5>.jsonl",
+        "<CLAUDE_DIR>/projects/<OTHER_PROJECT_2>/<SESSION_ID_2>.jsonl",
+        "<CLAUDE_DIR>/projects/<OTHER_PROJECT_4>/<SESSION_ID_4>.jsonl",
+        "<CLAUDE_DIR>/projects/<OTHER_PROJECT_1>/<SESSION_ID_1>/subagents/workflows/wf_2311c6f5-00e/agent-a9755cdc420b714d6.jsonl",
+        "<CLAUDE_DIR>/projects/<OTHER_PROJECT_1>/<SESSION_ID_1>/subagents/workflows/wf_2311c6f5-00e/agent-a3ee16143cc86a0d9.jsonl",
+        "<CLAUDE_DIR>/projects/<OTHER_PROJECT_3>/<SESSION_ID_3>.jsonl",
+        "<CLAUDE_DIR>/sessions/44871.json",
+        "<CLAUDE_DIR>/history.jsonl"
+      ],
+      "new_session_files_all_projects": [],
+      "changed_session_files_all_projects": [
+        "<CLAUDE_DIR>/projects/<OTHER_PROJECT_1>/<SESSION_ID_1>/subagents/workflows/wf_2311c6f5-00e/agent-a3ee16143cc86a0d9.jsonl",
+        "<CLAUDE_DIR>/projects/<OTHER_PROJECT_1>/<SESSION_ID_1>/subagents/workflows/wf_2311c6f5-00e/agent-a9755cdc420b714d6.jsonl",
+        "<CLAUDE_DIR>/projects/<OTHER_PROJECT_2>/<SESSION_ID_2>.jsonl",
+        "<CLAUDE_DIR>/projects/<OTHER_PROJECT_3>/<SESSION_ID_3>.jsonl",
+        "<CLAUDE_DIR>/projects/<OTHER_PROJECT_5>/<SESSION_ID_5>.jsonl",
+        "<CLAUDE_DIR>/projects/<OTHER_PROJECT_4>/<SESSION_ID_4>.jsonl"
+      ],
+      "probe_project": "<CLAUDE_DIR>/projects/<PROBE_PROJECT>",
+      "probe_usage_before": {},
+      "probe_usage_after": {},
+      "sentinels": {
+        "hook-ran": false,
+        "mcp-ran": false
+      },
+      "keychain_before": {
+        "exit_code": 0,
+        "password_requested": false,
+        "mdat_utc": "2026-10-17T04:45:53Z"
+      },
+      "keychain_after": {
+        "exit_code": 0,
+        "password_requested": false,
+        "mdat_utc": "2026-10-17T04:45:53Z"
+      },
+      "user_files_before": {
+        "<CLAUDE_DIR>/settings.json": {
+          "size": 4823,
+          "mtime_ns": 1792213272565106053,
+          "inode": 361872902
+        },
+        "<CLAUDE_DIR>/.claude.json": {
+          "size": 1641,
+          "mtime_ns": 1792212617318829921,
+          "inode": 361829561
+        },
+        "<CLAUDE_DIR>.json": {
+          "size": 952214,
+          "mtime_ns": 1792213636998990544,
+          "inode": 361889998
+        }
+      },
+      "user_files_after": {
+        "<CLAUDE_DIR>/settings.json": {
+          "size": 4823,
+          "mtime_ns": 1792213272565106053,
+          "inode": 361872902
+        },
+        "<CLAUDE_DIR>/.claude.json": {
+          "size": 1641,
+          "mtime_ns": 1792212617318829921,
+          "inode": 361829561
+        },
+        "<CLAUDE_DIR>.json": {
+          "size": 950116,
+          "mtime_ns": 1792213645973161418,
+          "inode": 361891247
+        }
+      },
+      "existing_hooks": {
+        "PermissionRequest": {
+          "effect": "terminal notification",
+          "observation": "unobservable"
+        },
+        "SessionStart": {
+          "effect": "undead log and tab registry",
+          "tracked_metadata_unchanged": true
+        },
+        "SessionEnd": {
+          "effect": "undead log and tab registry",
+          "tracked_metadata_unchanged": true
+        },
+        "undead_log_new_bytes": 0
+      },
+      "existing_mcp_server_names": {
+        "account_settings": [],
+        "default_global_config": []
+      },
+      "quota_reference": {
+        "five_hour_used_percent": 17,
+        "seven_day_used_percent": 1,
+        "five_hour_resets_local": "2026-10-17T04:39:00-04:00",
+        "seven_day_resets_local": "2026-10-24T00:59:00-04:00",
+        "timezone": "America/New_York",
+        "attribution": "confounded by concurrent account use"
+      },
+      "new_probe_message_usage_lines": 0,
+      "new_probe_session_files": [],
+      "find_stderr_bytes": 0
+    },
+    {
+      "label": "A2",
+      "started_utc": "2026-10-17T05:07:46.860530+00:00",
+      "argv": [
+        "claude",
+        "-p",
+        "--no-session-persistence",
+        "--strict-mcp-config",
+        "--settings",
+        "{\"remoteControlAtStartup\":false,\"disableAllHooks\":true}",
+        "--model",
+        "sonnet",
+        "--effort",
+        "low",
+        "/usage"
+      ],
+      "cwd": "<PROBE>",
+      "environment": {
+        "CLAUDE_CONFIG_DIR": "unset",
+        "ANTHROPIC_*": "removed",
+        "CLAUDE_CODE_OAUTH_TOKEN": "removed",
+        "DISABLE_AUTOUPDATER": "1",
+        "PWD": "<PROBE>"
+      },
+      "stdin": "/dev/null",
+      "stdout_is_tty": false,
+      "timeout_seconds": 30,
+      "exit_code": 0,
+      "timed_out": false,
+      "elapsed_seconds": 7.071,
+      "find_argv": [
+        "/usr/bin/find",
+        "<CLAUDE_DIR>",
+        "<PROBE>",
+        "-newer",
+        "<WORKDIR>/tmp/captures/A2-marker",
+        "-type",
+        "f"
+      ],
+      "find_exit_code": 0,
+      "find_files": [
+        "<CLAUDE_DIR>/plugins/synced/<ORG_ID>_<SYNC_ID>/.last-complete-round",
+        "<CLAUDE_DIR>/projects/<OTHER_PROJECT_5>/<SESSION_ID_5>.jsonl",
+        "<CLAUDE_DIR>/projects/<OTHER_PROJECT_1>/<SESSION_ID_1>/subagents/workflows/wf_2311c6f5-00e/agent-a9755cdc420b714d6.jsonl",
+        "<CLAUDE_DIR>/projects/<OTHER_PROJECT_3>/<SESSION_ID_3>.jsonl",
+        "<CLAUDE_DIR>/sessions/44871.json",
+        "<CLAUDE_DIR>/backups/.claude.json.backup.1792213669687"
+      ],
+      "new_session_files_all_projects": [],
+      "changed_session_files_all_projects": [
+        "<CLAUDE_DIR>/projects/<OTHER_PROJECT_1>/<SESSION_ID_1>/subagents/workflows/wf_2311c6f5-00e/agent-a9755cdc420b714d6.jsonl",
+        "<CLAUDE_DIR>/projects/<OTHER_PROJECT_3>/<SESSION_ID_3>.jsonl",
+        "<CLAUDE_DIR>/projects/<OTHER_PROJECT_5>/<SESSION_ID_5>.jsonl"
+      ],
+      "probe_project": "<CLAUDE_DIR>/projects/<PROBE_PROJECT>",
+      "probe_usage_before": {},
+      "probe_usage_after": {},
+      "sentinels": {
+        "hook-ran": false,
+        "mcp-ran": false
+      },
+      "keychain_before": {
+        "exit_code": 0,
+        "password_requested": false,
+        "mdat_utc": "2026-10-17T04:45:53Z"
+      },
+      "keychain_after": {
+        "exit_code": 0,
+        "password_requested": false,
+        "mdat_utc": "2026-10-17T04:45:53Z"
+      },
+      "user_files_before": {
+        "<CLAUDE_DIR>/settings.json": {
+          "size": 4823,
+          "mtime_ns": 1792213272565106053,
+          "inode": 361872902
+        },
+        "<CLAUDE_DIR>/.claude.json": {
+          "size": 1641,
+          "mtime_ns": 1792212617318829921,
+          "inode": 361829561
+        },
+        "<CLAUDE_DIR>.json": {
+          "size": 950116,
+          "mtime_ns": 1792213662011563194,
+          "inode": 361891382
+        }
+      },
+      "user_files_after": {
+        "<CLAUDE_DIR>/settings.json": {
+          "size": 4823,
+          "mtime_ns": 1792213272565106053,
+          "inode": 361872902
+        },
+        "<CLAUDE_DIR>/.claude.json": {
+          "size": 1641,
+          "mtime_ns": 1792212617318829921,
+          "inode": 361829561
+        },
+        "<CLAUDE_DIR>.json": {
+          "size": 950116,
+          "mtime_ns": 1792213669690972315,
+          "inode": 361891427
+        }
+      },
+      "existing_hooks": {
+        "PermissionRequest": {
+          "effect": "terminal notification",
+          "observation": "unobservable"
+        },
+        "SessionStart": {
+          "effect": "undead log and tab registry",
+          "tracked_metadata_unchanged": true
+        },
+        "SessionEnd": {
+          "effect": "undead log and tab registry",
+          "tracked_metadata_unchanged": true
+        },
+        "undead_log_new_bytes": 0
+      },
+      "existing_mcp_server_names": {
+        "account_settings": [],
+        "default_global_config": []
+      },
+      "quota_reference": {
+        "five_hour_used_percent": 17,
+        "seven_day_used_percent": 1,
+        "five_hour_resets_local": "2026-10-17T04:39:00-04:00",
+        "seven_day_resets_local": "2026-10-24T00:59:00-04:00",
+        "timezone": "America/New_York",
+        "attribution": "confounded by concurrent account use"
+      },
+      "new_probe_message_usage_lines": 0,
+      "new_probe_session_files": [],
+      "find_stderr_bytes": 0
+    }
+  ],
+  "decision": {
+    "passed_form": "A",
+    "B": "not run: A passed",
+    "session_cleanup": "not enabled: no probe session files observed",
+    "scope": "Default account only; explicit CLAUDE_CONFIG_DIR and other versions unverified."
+  }
+}

@@ -1,0 +1,484 @@
+{
+  "schema": 1,
+  "claude_version": "2.1.302 (Claude Code)",
+  "account": "two non-default authenticated accounts; CLAUDE_CONFIG_DIR set explicitly to <dir-a>, <dir-b>",
+  "quota_criterion": "own probe session message.usage lines; percentages are reference only.",
+  "probe_setup": {
+    ".claude/settings.local.json": {
+      "disableDeepLinkRegistration": "disable"
+    },
+    ".claude/settings.json": {
+      "hooks": {
+        "SessionStart": [
+          {
+            "hooks": [
+              {
+                "type": "command",
+                "command": "/usr/bin/touch <PROBE>/hook-ran"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    ".mcp.json": {
+      "mcpServers": {
+        "spike-sentinel": {
+          "type": "stdio",
+          "command": "/usr/bin/touch",
+          "args": [
+            "<PROBE>/mcp-ran"
+          ]
+        }
+      }
+    }
+  },
+  "runs": [
+    {
+      "label": "A1",
+      "account": "<dir-a>",
+      "started_utc": "2026-10-17T16:00:31.784789+00:00",
+      "argv": [
+        "claude",
+        "-p",
+        "--no-session-persistence",
+        "--strict-mcp-config",
+        "--settings",
+        "{\"remoteControlAtStartup\":false,\"disableAllHooks\":true}",
+        "--model",
+        "sonnet",
+        "--effort",
+        "low",
+        "/usage"
+      ],
+      "cwd": "<PROBE>",
+      "environment": {
+        "CLAUDE_CONFIG_DIR": "<dir-a>",
+        "ANTHROPIC_*": "removed",
+        "CLAUDE_CODE_OAUTH_TOKEN": "removed",
+        "DISABLE_AUTOUPDATER": "1",
+        "PWD": "<PROBE>"
+      },
+      "stdin": "/dev/null",
+      "stdout_is_tty": false,
+      "timeout_seconds": 30,
+      "exit_code": 0,
+      "timed_out": false,
+      "elapsed_seconds": 1.146,
+      "auth_status": {
+        "loggedIn": true,
+        "authMethod": "claude.ai",
+        "apiProvider": "firstParty",
+        "subscriptionType": "max"
+      },
+      "find_argv": [
+        "/usr/bin/find",
+        "<dir-a>",
+        "<PROBE>",
+        "-newer",
+        "<MARKER>",
+        "-type",
+        "f"
+      ],
+      "find_exit_code": 0,
+      "find_file_count": 231,
+      "probe_project": "<dir-a>/projects/<PROBE_PROJECT>",
+      "probe_usage_before": {},
+      "probe_usage_after": {},
+      "new_probe_session_files": [],
+      "new_probe_message_usage_lines": 0,
+      "sentinels": {
+        "hook-ran": false,
+        "mcp-ran": false
+      },
+      "keychain_service": "Claude Code-credentials-<sha256(<dir-a>)[:8]>",
+      "keychain_before": {
+        "exit_code": 0,
+        "password_requested": false,
+        "mdat_utc": "2026-10-17T15:55:58Z"
+      },
+      "keychain_after": {
+        "exit_code": 0,
+        "password_requested": false,
+        "mdat_utc": "2026-10-17T15:55:58Z"
+      },
+      "user_files_before": {
+        "<dir-a>/settings.json": {
+          "size": 22,
+          "mtime_ns": 1792252539476750781,
+          "inode": 363230556
+        },
+        "<dir-a>/.claude.json": {
+          "size": 66694,
+          "mtime_ns": 1792252580780089668,
+          "inode": 363234537
+        }
+      },
+      "user_files_after": {
+        "<dir-a>/settings.json": {
+          "size": 22,
+          "mtime_ns": 1792252539476750781,
+          "inode": 363230556
+        },
+        "<dir-a>/.claude.json": {
+          "size": 69204,
+          "mtime_ns": 1792252832531892411,
+          "inode": 363277709
+        }
+      },
+      "parsed": {
+        "session_left": 100,
+        "weekly_left": 0,
+        "session_reset": null,
+        "weekly_reset": "resets Oct 18 at 6am (America/New_York)"
+      },
+      "parse_error": null,
+      "quota_reference": {
+        "five_hour_used_percent": 0,
+        "seven_day_used_percent": 100,
+        "five_hour_resets_at": null,
+        "seven_day_resets_at": 1792317600,
+        "timezone": "America/New_York"
+      }
+    },
+    {
+      "label": "A2",
+      "account": "<dir-a>",
+      "started_utc": "2026-10-17T16:00:34.211703+00:00",
+      "argv": [
+        "claude",
+        "-p",
+        "--no-session-persistence",
+        "--strict-mcp-config",
+        "--settings",
+        "{\"remoteControlAtStartup\":false,\"disableAllHooks\":true}",
+        "--model",
+        "sonnet",
+        "--effort",
+        "low",
+        "/usage"
+      ],
+      "cwd": "<PROBE>",
+      "environment": {
+        "CLAUDE_CONFIG_DIR": "<dir-a>",
+        "ANTHROPIC_*": "removed",
+        "CLAUDE_CODE_OAUTH_TOKEN": "removed",
+        "DISABLE_AUTOUPDATER": "1",
+        "PWD": "<PROBE>"
+      },
+      "stdin": "/dev/null",
+      "stdout_is_tty": false,
+      "timeout_seconds": 30,
+      "exit_code": 0,
+      "timed_out": false,
+      "elapsed_seconds": 0.833,
+      "auth_status": {
+        "loggedIn": true,
+        "authMethod": "claude.ai",
+        "apiProvider": "firstParty",
+        "subscriptionType": "max"
+      },
+      "find_argv": [
+        "/usr/bin/find",
+        "<dir-a>",
+        "<PROBE>",
+        "-newer",
+        "<MARKER>",
+        "-type",
+        "f"
+      ],
+      "find_exit_code": 0,
+      "find_file_count": 3,
+      "probe_project": "<dir-a>/projects/<PROBE_PROJECT>",
+      "probe_usage_before": {},
+      "probe_usage_after": {},
+      "new_probe_session_files": [],
+      "new_probe_message_usage_lines": 0,
+      "sentinels": {
+        "hook-ran": false,
+        "mcp-ran": false
+      },
+      "keychain_service": "Claude Code-credentials-<sha256(<dir-a>)[:8]>",
+      "keychain_before": {
+        "exit_code": 0,
+        "password_requested": false,
+        "mdat_utc": "2026-10-17T15:55:58Z"
+      },
+      "keychain_after": {
+        "exit_code": 0,
+        "password_requested": false,
+        "mdat_utc": "2026-10-17T15:55:58Z"
+      },
+      "user_files_before": {
+        "<dir-a>/settings.json": {
+          "size": 22,
+          "mtime_ns": 1792252539476750781,
+          "inode": 363230556
+        },
+        "<dir-a>/.claude.json": {
+          "size": 69204,
+          "mtime_ns": 1792252832531892411,
+          "inode": 363277709
+        }
+      },
+      "user_files_after": {
+        "<dir-a>/settings.json": {
+          "size": 22,
+          "mtime_ns": 1792252539476750781,
+          "inode": 363230556
+        },
+        "<dir-a>/.claude.json": {
+          "size": 69204,
+          "mtime_ns": 1792252834557220019,
+          "inode": 363278264
+        }
+      },
+      "parsed": {
+        "session_left": 100,
+        "weekly_left": 0,
+        "session_reset": null,
+        "weekly_reset": "resets Oct 18 at 6am (America/New_York)"
+      },
+      "parse_error": null,
+      "quota_reference": {
+        "five_hour_used_percent": 0,
+        "seven_day_used_percent": 100,
+        "five_hour_resets_at": null,
+        "seven_day_resets_at": 1792317600,
+        "timezone": "America/New_York"
+      }
+    },
+    {
+      "label": "B1",
+      "account": "<dir-b>",
+      "started_utc": "2026-10-17T16:00:36.540215+00:00",
+      "argv": [
+        "claude",
+        "-p",
+        "--no-session-persistence",
+        "--strict-mcp-config",
+        "--settings",
+        "{\"remoteControlAtStartup\":false,\"disableAllHooks\":true}",
+        "--model",
+        "sonnet",
+        "--effort",
+        "low",
+        "/usage"
+      ],
+      "cwd": "<PROBE>",
+      "environment": {
+        "CLAUDE_CONFIG_DIR": "<dir-b>",
+        "ANTHROPIC_*": "removed",
+        "CLAUDE_CODE_OAUTH_TOKEN": "removed",
+        "DISABLE_AUTOUPDATER": "1",
+        "PWD": "<PROBE>"
+      },
+      "stdin": "/dev/null",
+      "stdout_is_tty": false,
+      "timeout_seconds": 30,
+      "exit_code": 0,
+      "timed_out": false,
+      "elapsed_seconds": 1.153,
+      "auth_status": {
+        "loggedIn": true,
+        "authMethod": "claude.ai",
+        "apiProvider": "firstParty",
+        "subscriptionType": "max"
+      },
+      "find_argv": [
+        "/usr/bin/find",
+        "<dir-b>",
+        "<PROBE>",
+        "-newer",
+        "<MARKER>",
+        "-type",
+        "f"
+      ],
+      "find_exit_code": 0,
+      "find_file_count": 232,
+      "probe_project": "<dir-b>/projects/<PROBE_PROJECT>",
+      "probe_usage_before": {},
+      "probe_usage_after": {},
+      "new_probe_session_files": [],
+      "new_probe_message_usage_lines": 0,
+      "sentinels": {
+        "hook-ran": false,
+        "mcp-ran": false
+      },
+      "keychain_service": "Claude Code-credentials-<sha256(<dir-b>)[:8]>",
+      "keychain_before": {
+        "exit_code": 0,
+        "password_requested": false,
+        "mdat_utc": "2026-10-17T15:57:13Z"
+      },
+      "keychain_after": {
+        "exit_code": 0,
+        "password_requested": false,
+        "mdat_utc": "2026-10-17T15:57:13Z"
+      },
+      "user_files_before": {
+        "<dir-b>/settings.json": {
+          "size": 22,
+          "mtime_ns": 1792252602751938222,
+          "inode": 363236085
+        },
+        "<dir-b>/.claude.json": {
+          "size": 63074,
+          "mtime_ns": 1792252649124735019,
+          "inode": 363240730
+        }
+      },
+      "user_files_after": {
+        "<dir-b>/settings.json": {
+          "size": 22,
+          "mtime_ns": 1792252602751938222,
+          "inode": 363236085
+        },
+        "<dir-b>/.claude.json": {
+          "size": 64688,
+          "mtime_ns": 1792252837279197655,
+          "inode": 363278307
+        }
+      },
+      "parsed": {
+        "session_left": 87,
+        "weekly_left": 86,
+        "session_reset": "resets Oct 17 at 2:40pm (America/New_York)",
+        "weekly_reset": "resets Oct 24 at 1am (America/New_York)"
+      },
+      "parse_error": null,
+      "quota_reference": {
+        "five_hour_used_percent": 13,
+        "seven_day_used_percent": 14,
+        "five_hour_resets_at": 1792262400,
+        "seven_day_resets_at": 1792818000,
+        "timezone": "America/New_York"
+      }
+    },
+    {
+      "label": "B2",
+      "account": "<dir-b>",
+      "started_utc": "2026-10-17T16:00:38.970503+00:00",
+      "argv": [
+        "claude",
+        "-p",
+        "--no-session-persistence",
+        "--strict-mcp-config",
+        "--settings",
+        "{\"remoteControlAtStartup\":false,\"disableAllHooks\":true}",
+        "--model",
+        "sonnet",
+        "--effort",
+        "low",
+        "/usage"
+      ],
+      "cwd": "<PROBE>",
+      "environment": {
+        "CLAUDE_CONFIG_DIR": "<dir-b>",
+        "ANTHROPIC_*": "removed",
+        "CLAUDE_CODE_OAUTH_TOKEN": "removed",
+        "DISABLE_AUTOUPDATER": "1",
+        "PWD": "<PROBE>"
+      },
+      "stdin": "/dev/null",
+      "stdout_is_tty": false,
+      "timeout_seconds": 30,
+      "exit_code": 0,
+      "timed_out": false,
+      "elapsed_seconds": 0.916,
+      "auth_status": {
+        "loggedIn": true,
+        "authMethod": "claude.ai",
+        "apiProvider": "firstParty",
+        "subscriptionType": "max"
+      },
+      "find_argv": [
+        "/usr/bin/find",
+        "<dir-b>",
+        "<PROBE>",
+        "-newer",
+        "<MARKER>",
+        "-type",
+        "f"
+      ],
+      "find_exit_code": 0,
+      "find_file_count": 2,
+      "probe_project": "<dir-b>/projects/<PROBE_PROJECT>",
+      "probe_usage_before": {},
+      "probe_usage_after": {},
+      "new_probe_session_files": [],
+      "new_probe_message_usage_lines": 0,
+      "sentinels": {
+        "hook-ran": false,
+        "mcp-ran": false
+      },
+      "keychain_service": "Claude Code-credentials-<sha256(<dir-b>)[:8]>",
+      "keychain_before": {
+        "exit_code": 0,
+        "password_requested": false,
+        "mdat_utc": "2026-10-17T15:57:13Z"
+      },
+      "keychain_after": {
+        "exit_code": 0,
+        "password_requested": false,
+        "mdat_utc": "2026-10-17T15:57:13Z"
+      },
+      "user_files_before": {
+        "<dir-b>/settings.json": {
+          "size": 22,
+          "mtime_ns": 1792252602751938222,
+          "inode": 363236085
+        },
+        "<dir-b>/.claude.json": {
+          "size": 64688,
+          "mtime_ns": 1792252837279197655,
+          "inode": 363278307
+        }
+      },
+      "user_files_after": {
+        "<dir-b>/settings.json": {
+          "size": 22,
+          "mtime_ns": 1792252602751938222,
+          "inode": 363236085
+        },
+        "<dir-b>/.claude.json": {
+          "size": 64688,
+          "mtime_ns": 1792252839296806521,
+          "inode": 363278627
+        }
+      },
+      "parsed": {
+        "session_left": 87,
+        "weekly_left": 86,
+        "session_reset": "resets Oct 17 at 2:40pm (America/New_York)",
+        "weekly_reset": "resets Oct 24 at 1am (America/New_York)"
+      },
+      "parse_error": null,
+      "quota_reference": {
+        "five_hour_used_percent": 13,
+        "seven_day_used_percent": 14,
+        "five_hour_resets_at": 1792262400,
+        "seven_day_resets_at": 1792818000,
+        "timezone": "America/New_York"
+      }
+    }
+  ],
+  "decision": {
+    "<dir-a>": {
+      "1_logged_in": true,
+      "2_percent_and_resets": false,
+      "3_no_probe_message_usage": true,
+      "4_no_hooks_or_mcp": true,
+      "passed": false
+    },
+    "<dir-b>": {
+      "1_logged_in": true,
+      "2_percent_and_resets": true,
+      "3_no_probe_message_usage": true,
+      "4_no_hooks_or_mcp": true,
+      "passed": true
+    },
+    "<dir-a>_note": "no 5h reset line: Current session 0% used, weekly quota exhausted; retest after the weekly reset",
+    "scope": "Claude Code 2.1.302; two non-default accounts only."
+  }
+}

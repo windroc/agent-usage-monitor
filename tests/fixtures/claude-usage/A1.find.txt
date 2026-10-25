@@ -1,0 +1,9 @@
+<CLAUDE_DIR>/plugins/synced/<ORG_ID>_<SYNC_ID>/.last-complete-round
+<CLAUDE_DIR>/projects/<OTHER_PROJECT_5>/<SESSION_ID_5>.jsonl
+<CLAUDE_DIR>/projects/<OTHER_PROJECT_2>/<SESSION_ID_2>.jsonl
+<CLAUDE_DIR>/projects/<OTHER_PROJECT_4>/<SESSION_ID_4>.jsonl
+<CLAUDE_DIR>/projects/<OTHER_PROJECT_1>/<SESSION_ID_1>/subagents/workflows/wf_2311c6f5-00e/agent-a9755cdc420b714d6.jsonl
+<CLAUDE_DIR>/projects/<OTHER_PROJECT_1>/<SESSION_ID_1>/subagents/workflows/wf_2311c6f5-00e/agent-a3ee16143cc86a0d9.jsonl
+<CLAUDE_DIR>/projects/<OTHER_PROJECT_3>/<SESSION_ID_3>.jsonl
+<CLAUDE_DIR>/sessions/44871.json
+<CLAUDE_DIR>/history.jsonl

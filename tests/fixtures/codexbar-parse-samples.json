@@ -1,0 +1,342 @@
+{
+ "source": "CodexBar Tests/CodexBarTests at 6480977b47f6e4ffd5dcaae1cb0c7fdf34ee449e: inputs of tests calling ClaudeStatusProbe.parse, with their assertions on ported fields",
+ "cases": [
+  {
+   "source": "StatusProbeTests.swift::parse claude status",
+   "input": "Settings: Status   Config   Usage (tab to cycle)\n\nCurrent session\n1% used  (Resets 5am (Europe/Vienna))\nCurrent week (all models)\n1% used  (Resets Dec 2 at 12am (Europe/Vienna))\nCurrent week (Sonnet only)\n1% used (Resets Dec 2 at 12am (Europe/Vienna))\n\nNov 24, 2025 update:\nWe've increased your limits and removed the Opus cap,\nso you can use Opus 4.5 up to your overall limit.\nSonnet now has its own limit—it's set to match your previous overall limit,\nso you can use just as much as before.\nAccount: user@example.com\nOrg: Example Org",
+   "parsed": {
+    "session_left": 99,
+    "weekly_left": 99,
+    "session_reset": "Resets 5am (Europe/Vienna)",
+    "weekly_reset": "Resets Dec 2 at 12am (Europe/Vienna)"
+   }
+  },
+  {
+   "source": "StatusProbeTests.swift::parse claude status with ANSI",
+   "input": "\u001b[35mCurrent session\u001b[0m\n40% used  (Resets 11am)\nCurrent week (all models)\n10% used  (Resets Nov 27)\nCurrent week (Sonnet only)\n0% used (Resets Nov 27)\nAccount: user@example.com\nOrg: ACME\n\u001b[0m",
+   "parsed": {
+    "session_left": 60,
+    "weekly_left": 90,
+    "session_reset": "Resets 11am",
+    "weekly_reset": "Resets Nov 27"
+   }
+  },
+  {
+   "source": "StatusProbeTests.swift::parse claude status legacy opus label",
+   "input": "Current session\n12% used  (Resets 11am)\nCurrent week (all models)\n55% used  (Resets Nov 21)\nCurrent week (Opus)\n5% used (Resets Nov 21)\nAccount: user@example.com\nOrg: Example Org",
+   "parsed": {
+    "session_left": 88,
+    "weekly_left": 45,
+    "session_reset": "Resets 11am",
+    "weekly_reset": "Resets Nov 21"
+   }
+  },
+  {
+   "source": "StatusProbeTests.swift::parse claude status remaining keyword",
+   "input": "Current session\n12% remaining (Resets 11am)\nCurrent week (all models)\n40% remaining (Resets Nov 21)",
+   "parsed": {
+    "session_left": 12,
+    "weekly_left": 40
+   }
+  },
+  {
+   "source": "StatusProbeTests.swift::parse claude status enterprise session only",
+   "input": "Current session\n█                                                  2% used\nResets 3pm (Europe/Vienna)",
+   "parsed": {
+    "session_left": 98,
+    "weekly_left": null,
+    "session_reset": "Resets 3pm (Europe/Vienna)",
+    "weekly_reset": null
+   }
+  },
+  {
+   "source": "StatusProbeTests.swift::parse claude status reset mappings with CR line endings",
+   "input": "Current  session\r██████████████████████████████████████████████████  17% used\rResets 12:59pm (Europe/Paris)\rCurrent week (all models)\r██████████████████████████████████████████████████   4% used\rResets Dec 24 at 3:59pm (Europe/Paris)\rCurrent week (Sonnet only)\r██████████████████████████████████████████████████   3% used\rResets Dec 23 at 3:59am (Europe/Paris)\r",
+   "parsed": {
+    "session_left": 83,
+    "weekly_left": 96,
+    "session_reset": "Resets 12:59pm (Europe/Paris)",
+    "weekly_reset": "Resets Dec 24 at 3:59pm (Europe/Paris)"
+   }
+  },
+  {
+   "source": "StatusProbeTests.swift::parse claude status reset mappings does not promote weekly reset to session",
+   "input": "Current session\n██████████████████████████████████████████████████  17% used\nCurrent week (all models)\n██████████████████████████████████████████████████   4% used\nResets Dec 24 at 3:59pm (Europe/Paris)",
+   "parsed": {
+    "session_left": 83,
+    "weekly_left": 96,
+    "session_reset": null,
+    "weekly_reset": "Resets Dec 24 at 3:59pm (Europe/Paris)"
+   }
+  },
+  {
+   "source": "StatusProbeTests.swift::parse claude status with extra usage section",
+   "input": "Settings:  Status   Config   Usage  (tab to cycle)\n\n Current session\n ▌                                                  1% used\n Resets 3:59pm (Europe/Helsinki)\n\n Current week (all models)\n ▌                                                  1% used\n Resets Jan 2, 2026, 10:59pm (Europe/Helsinki)\n\n Current week (Sonnet only)\n                                                    0% used\n\n Extra usage\n Extra usage not enabled • /extra-usage to enable",
+   "parsed": {
+    "session_left": 99,
+    "weekly_left": 99,
+    "session_reset": "Resets 3:59pm (Europe/Helsinki)",
+    "weekly_reset": "Resets Jan 2, 2026, 10:59pm (Europe/Helsinki)"
+   }
+  },
+  {
+   "source": "StatusProbeTests.swift::parse claude status ignores status bar context percent",
+   "input": "Claude Code v2.1.29\n22:47 |  | Opus 4.5 | default | ░░░░░░░░░░ 0%  ◯ /ide for Visual Studio Code\n\nSettings:  Status   Config   Usage  (tab to cycle)\nLoading usage data…\nEsc to cancel\n\nCurretsession\n███████▌15%used\nResets 11:30pm (Asia/Calcutta)\n\nCurrent week (all models)\n█▌                                                 3% used\nResets Feb 12 at 1:30pm (Asia/Calcutta)\n\nCurrent week (Sonnet only)\n▌                                                  1% used\nResets Feb 12 at 1:30pm (Asia/Calcutta)",
+   "kind": "unrecognized"
+  },
+  {
+   "source": "StatusProbeTests.swift::parse claude status loading panel surfaces loading stall",
+   "input": "Claude Code v2.1.29\n22:47 |  | Opus 4.5 | default | ░░░░░░░░░░ 0%  ◯ /ide for Visual Studio Code\n\nSettings:  Status   Config   Usage  (tab to cycle)\nLoading usage data…\nEsc to cancel",
+   "kind": "loading",
+   "contains": [
+    "loading"
+   ]
+  },
+  {
+   "source": "StatusProbeTests.swift::parse claude retained usage panel classifies latest loading panel",
+   "input": "Settings:  Status   Config   Usage  (tab to cycle)\nCurrent session\n███████▌15%used\nResets 11:30pm (Asia/Calcutta)\n\nCurrent week (all models)\n█▌ 3% used\nResets Feb 12 at 1:30pm (Asia/Calcutta)\n\nSettings:  Status   Config   Usage  (tab to cycle)\nLoading usage data…\nEsc to cancel",
+   "kind": "loading",
+   "contains": [
+    "loading"
+   ]
+  },
+  {
+   "source": "StatusProbeTests.swift::parse claude status status only output does not fallback to zero",
+   "input": "Claude Code v2.1.32\n01:07 |  | Opus 4.6 | default | ░░░░░░░░░░ 0% left\nStatus: Partially Degraded Service\n/status",
+   "kind": "unrecognized"
+  },
+  {
+   "source": "StatusProbeTests.swift::parse claude status placeholder usage window does not use status bar percent",
+   "input": "Claude Code v2.1.32\n01:07 |  | Opus 4.6 | default | ░░░░░░░░░░ 0% left\nSettings: Status   Config   Usage\nCurrent session\nCurrent week (all models)\nCurrent week (Sonnet only)",
+   "kind": "unrecognized"
+  },
+  {
+   "source": "StatusProbeTests.swift::parse claude status compact markers still parse",
+   "input": "Settings:StatusConfigUsage(←/→ortabtocycle)\nLoadingusagedata…\nCurretsession\n███6%used\nResets4:29am(Asia/Calcutta)\nCurrentweek(allmodels)\n██4%used\nResetsFeb12at1:29pm(Asia/Calcutta)\nCurrentweek(Sonnetonly)\n▌1%used\nResetsFeb12at1:29pm(Asia/Calcutta)",
+   "kind": "unrecognized"
+  },
+  {
+   "source": "StatusProbeTests.swift::surfaces claude token expired",
+   "input": "Settings:  Status   Config   Usage\n\nError: Failed to load usage data: {\"type\":\"error\",\"error\":{\"type\":\"authentication_error\",\n\"message\":\"OAuth token has expired. Please obtain a new token or refresh your existing token.\",\n\"details\":{\"error_visibility\":\"user_facing\",\"error_code\":\"token_expired\"}},\"request_id\":\"req_123\"}",
+   "kind": "auth",
+   "contains": [
+    "token",
+    "login"
+   ]
+  },
+  {
+   "source": "StatusProbeTests.swift::classifies Claude login failures separately from parser failures [text1]",
+   "input": "Error: Failed to load usage data: {\"error\":{\"type\":\"error\",\"message\":\"OAuth account information not found in config\"}}",
+   "kind": "auth"
+  },
+  {
+   "source": "StatusProbeTests.swift::classifies Claude login failures separately from parser failures [text2]",
+   "input": "Error: Failed to load usage data: {\"error\":{\"type\":\"error\",\"message\":\"Your account does not have access to Claude Code. Please run /login\"}}",
+   "kind": "auth"
+  },
+  {
+   "source": "StatusProbeTests.swift::classifies Claude login failures separately from parser failures [text3]",
+   "input": "Error: Failed to load usage data: {\"error\":{\"type\":\"error\",\"message\":\"API Error: 401\"}}",
+   "kind": "auth"
+  },
+  {
+   "source": "StatusProbeTests.swift::classifies Claude login failures separately from parser failures [text4]",
+   "input": "Error: Failed to load usage data: {\"error\":{\"type\":\"permission_error\",\"message\":\"API Error: 403\"}}",
+   "kind": "auth"
+  },
+  {
+   "source": "StatusProbeTests.swift::classifies Claude login failures separately from parser failures [text5]",
+   "input": "Error: Failed to load usage data: {\"error\":{\"type\":\"error\",\"message\":\"Claude CLI token expired. Run `claude login` to refresh.\"}}",
+   "kind": "auth"
+  },
+  {
+   "source": "StatusProbeTests.swift::surfaces claude rate limited compact usage error",
+   "input": "Settings:StatusConfigUsage(←/→ortabtocycle)\nError:Failedtoloadusagedata:{\"error\":{\"message\":\"Ratelimited.Pleasetryagainlater.\",\"type\":\"rate_limit_error\"}}",
+   "kind": "usage_error",
+   "contains": [
+    "rate",
+    "limit"
+   ]
+  },
+  {
+   "source": "StatusProbeTests.swift::surfaces claude folder trust prompt",
+   "input": "Do you trust the files in this folder?\n\n/Users/example/project",
+   "kind": "usage_error",
+   "contains": [
+    "trust",
+    "/Users/example/project",
+    "cd \"/Users/example/project\" && claude"
+   ]
+  },
+  {
+   "source": "StatusProbeTests.swift::surfaces claude folder trust prompt with CRLF and spaces",
+   "input": "Do you trust the files in this folder?\r\n\r\n/Users/example/My Project\r\n",
+   "kind": "usage_error",
+   "contains": [
+    "/Users/example/My Project",
+    "cd \"/Users/example/My Project\" && claude"
+   ]
+  },
+  {
+   "source": "StatusProbeTests.swift::surfaces claude folder trust prompt without folder path",
+   "input": "Do you trust the files in this folder?",
+   "kind": "usage_error",
+   "contains": [
+    "trust",
+    "auto-accept"
+   ]
+  },
+  {
+   "source": "StatusProbeTests.swift::surfaces claude subscription notice without quota data",
+   "input": "You are currently using your subscription to power your Claude Code usage",
+   "kind": "usage_error",
+   "contains": [
+    "subscription",
+    "subscription notice without session quota data"
+   ],
+   "excludes": [
+    "still loading"
+   ]
+  },
+  {
+   "source": "StatusProbeTests.swift::parse claude status subscription notice is distinct from loading stall [subscription_only]",
+   "input": "You are currently using your subscription to power your Claude Code usage",
+   "kind": "usage_error",
+   "excludes": [
+    "still loading"
+   ]
+  },
+  {
+   "source": "StatusProbeTests.swift::parse claude status subscription notice is distinct from loading stall [loading_only]",
+   "input": "Settings:  Status   Config   Usage  (tab to cycle)\nLoading usage data…\nEsc to cancel",
+   "kind": "loading",
+   "contains": [
+    "loading"
+   ]
+  },
+  {
+   "source": "StatusProbeTests.swift::parse claude status mixed loading and subscription notice surfaces subscription error",
+   "input": "Settings:  Status   Config   Usage  (tab to cycle)\nLoading usage data…\nEsc to cancel\n\nYou are currently using your subscription to power your Claude Code usage",
+   "kind": "usage_error",
+   "contains": [
+    "subscription"
+   ],
+   "excludes": [
+    "still loading"
+   ]
+  },
+  {
+   "source": "StatusProbeTests.swift::ClaudeUsageErrorClassificationTests/ignores authentication words outside the usage error",
+   "input": "Hook warning: forbidden command skipped\nError: Failed to load usage data: Session quota fields were unavailable",
+   "not_kind": "auth"
+  },
+  {
+   "source": "ClaudeAllModelsWeeklyDuplicateTests.swift::garbled all-models copy does not duplicate the weekly row",
+   "input": "Settings:  Status   Config   Usage  (tab to cycle)\n\n Current session\n ▌                                                  0% used\n Resets 1:10pm (Asia/Seoul)\n\n Current week (all models)\n █████████████████████████████████▌                66% used\n Resets Jul 24 at 2pm (Asia/Seoul)\n\n Current week (all modls)\n █████████████████████████████████▌                67% used\n Resets Jul 24 at 1:59pm (Asia/Seoul)\n\n Current week (Fable)\n ████████████████████████████████████              71% used\n Resets Jul 24 at 2pm (Asia/Seoul)",
+   "parsed": {
+    "weekly_left": 34
+   }
+  },
+  {
+   "source": "ClaudeAllModelsWeeklyDuplicateTests.swift::exact all-models row wins over an earlier garbled duplicate",
+   "input": "Settings:  Status   Config   Usage  (tab to cycle)\n\n Current session\n ▌                                                  0% used\n Resets 1:10pm (Asia/Seoul)\n\n Current week (all modls)\n █████████████████████████████████▌                67% used\n Resets Jul 24 at 1:59pm (Asia/Seoul)\n\n Current week (all models)\n █████████████████████████████████▌                66% used\n Resets Jul 24 at 2pm (Asia/Seoul)",
+   "parsed": {
+    "weekly_left": 34,
+    "weekly_reset": "Resets Jul 24 at 2pm (Asia/Seoul)"
+   }
+  },
+  {
+   "source": "ClaudeAllModelsWeeklyDuplicateTests.swift::garbled all-models line still populates the weekly limit",
+   "input": "Settings:  Status   Config   Usage  (tab to cycle)\n\n Current session\n ▌                                                  0% used\n Resets 1:10pm (Asia/Seoul)\n\n Current week (all modls)\n █████████████████████████████████▌                66% used\n Resets Jul 24 at 2pm (Asia/Seoul)\n\n Current week (Fable)\n ████████████████████████████████████              71% used\n Resets Jul 24 at 2pm (Asia/Seoul)",
+   "parsed": {
+    "weekly_left": 34,
+    "weekly_reset": "Resets Jul 24 at 2pm (Asia/Seoul)"
+   }
+  },
+  {
+   "source": "ClaudeAllModelsWeeklyDuplicateTests.swift::single-character insertion is treated as all-models",
+   "input": " Current session\n ▌                                                  0% used\n Resets 1:10pm (Asia/Seoul)\n\n Current week (all modelss)\n █████████████████████████████████▌                66% used\n Resets Jul 24 at 2pm (Asia/Seoul)\n\n Current week (Fable)\n ████████████████████████████████████              71% used\n Resets Jul 24 at 2pm (Asia/Seoul)",
+   "parsed": {
+    "weekly_left": 34
+   }
+  },
+  {
+   "source": "ClaudeAllModelsWeeklyDuplicateTests.swift::genuine scoped model is preserved and leaves the weekly limit unset",
+   "input": " Current session\n ▌                                                  0% used\n Resets 1:10pm (Asia/Seoul)\n\n Current week (Haiku)\n █▌                                                 10% used\n Resets Jul 24 at 2pm (Asia/Seoul)",
+   "parsed": {
+    "weekly_left": null
+   }
+  },
+  {
+   "source": "ClaudeAllModelsWeeklyDuplicateTests.swift::heavier corruption stays a visible scoped row",
+   "input": " Current session\n ▌                                                  0% used\n Resets 1:10pm (Asia/Seoul)\n\n Current week (almdls)\n █████████████████████████████████▌                66% used\n Resets Jul 24 at 2pm (Asia/Seoul)",
+   "parsed": {
+    "weekly_left": null
+   }
+  },
+  {
+   "source": "ClaudeCLIScopedWeeklyUsageTests.swift::scoped weekly panel does not become all models weekly usage",
+   "input": "Current session\n9% used\n\nCurrent week (Fable)\n68% used",
+   "parsed": {
+    "weekly_left": null,
+    "weekly_reset": null
+   }
+  },
+  {
+   "source": "ClaudeCLIScopedWeeklyUsageTests.swift::incomplete scoped panel stops at session redraw",
+   "input": "Current week (Fable)\nrendering\n\nCurrent session\n9% used\n\nCurrent week (all models)\n20% used",
+   "parsed": {
+    "session_left": 91,
+    "weekly_left": 80
+   }
+  },
+  {
+   "source": "ClaudeCLIScopedWeeklyUsageTests.swift::incomplete all models panel does not consume scoped percentage",
+   "input": "Current session\n9% used\n\nCurrent week (all models)\nrendering\n\nCurrent week (Fable)\n42% used",
+   "parsed": {
+    "weekly_left": null
+   }
+  },
+  {
+   "source": "ClaudeCLIScreenProbeTests.swift::styled plain reports preserve CR delimiters and ignore OSC contents",
+   "input": "\u001b]0;\u001b[HCurrent session 99% used\u0007\u001b[35mCurrent session\u001b[0m\r3% used\r",
+   "parsed": {
+    "session_left": 97
+   }
+  },
+  {
+   "source": "ClaudeCLIScreenProbeTests.swift::styled plain reports are not clipped or wrapped to PTY geometry",
+   "input": "\u001b[32mCurrent session\n3% used\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nreport detail\nOrg: ExampleExampleExampleExampleExampleExampleExampleExampleExampleExampleExampleExampleExampleExampleExampleExampleExampleExampleExampleExampleExampleExampleExampleExampleExampleExampleExampleExampleExampleExample\nEmail: fixture@example.com\u001b[0m",
+   "parsed": {
+    "session_left": 97
+   }
+  },
+  {
+   "source": "ClaudeCLISpendCapTests.swift::CLI cap enrichment preserves quota and rejects an unsupported currency [valid]",
+   "input": "Current session\n12% used\nCurrent week (all models)\n25% used\nUsage credits\n$42 / $100 spent",
+   "parsed": {
+    "session_left": 88
+   }
+  },
+  {
+   "source": "ClaudeCLISpendCapTests.swift::CLI cap enrichment preserves quota and rejects an unsupported currency [drifted]",
+   "input": "Current session\n12% used\nCurrent week (all models)\n25% used\nUsage credits\nCA$42 / CA$100 spent",
+   "parsed": {}
+  },
+  {
+   "source": "ClaudeUsageInsightsTests.swift::quota panel ignores user named insights when extracting identity",
+   "input": "Settings Status Config Usage Stats\nCurrent session\n██████ 13% used\nResets 2:20pm (Asia/Singapore)\nCurrent week (all models)\n█ 2% used\nResets Oct 3 at 8am (Asia/Singapore)\nWhat's contributing to your limits usage?\nApproximate, based on local sessions on this machine — does not include other devices or claude.ai.\nLast 24h · 100 requests · 2 sessions\n  30% of your usage was at >150k context\n  20% of your usage was while 4+ sessions ran in parallel\n  Top MCP servers: Claude Browser 10%, claude-in-chrome 5%\nLast 7d · 1000 requests · 20 sessions\n  Top skills: Claude Max 20%",
+   "parsed": {
+    "session_left": 87,
+    "weekly_left": 98,
+    "session_reset": "Resets 2:20pm (Asia/Singapore)"
+   }
+  },
+  {
+   "source": "ClaudeUsageInsightsTests.swift::insights without quotas never become numeric limits",
+   "input": "You are currently using your subscription to power your Claude Code usage\nWhat's contributing to your limits usage?\nApproximate, based on local sessions on this machine — does not include other devices or claude.ai.\nLast 24h · 100 requests · 2 sessions\n  30% of your usage was at >150k context\n  20% of your usage was while 4+ sessions ran in parallel\n  Top MCP servers: Claude Browser 10%, claude-in-chrome 5%\nLast 7d · 1000 requests · 20 sessions\n  Top skills: Claude Max 20%",
+   "kind": "usage_error",
+   "message": "Claude CLI /usage returned usage insights without quota data."
+  }
+ ]
+}

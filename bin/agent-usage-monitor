@@ -1,0 +1,10 @@
+#!/usr/bin/python3
+import os
+import sys
+
+# realpath: still finds the package when run through the ~/.local/bin symlink
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
+
+from agent_usage_monitor.cli import main  # noqa: E402
+
+sys.exit(main())

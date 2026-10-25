@@ -1,0 +1,13 @@
+# Values tests/pii_scan.py lets through (NFR-4). One entry per line: `<value, fnmatch glob or sha256:<hex>> [in:identity] <why it is allowed>`.
+# `in:identity` allows the value only as a commit author or committer email, never in files or commit messages.
+# `sha256:<hex>`: the SHA-256 of the lowercased value, for a value no file may hold.
+# Explain each new entry in its pull request.
+noreply@anthropic.com          Claude Code co-author attribution address, not a person
+*@users.noreply.github.com     GitHub noreply commit address, which hides the real one
+noreply@github.com             GitHub's committer for web merges
+git@github.com                 SSH user in GitHub clone URLs, not a person
+icon_512x512@2x.png            macOS iconset file name, not an email
+/Users/example                 placeholder home in docs and tests
+/Users/u                       placeholder home in tests
+/Users/runner                  home of the GitHub Actions runner
+/Users/...                     elided home path in docs

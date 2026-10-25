@@ -1,0 +1,175 @@
+"""Claude probe (FR-9 to FR-11): `claude -p /usage` per account (docs/spikes/TASK-572-claude-usage.md,
+docs/spikes/TASK-583-claude-config-dir-usage.md).
+
+Launch follows CodexBar's direct /usage probe (THIRD_PARTY_NOTICES.md); output parsing is claude_usage.
+"""
+
+import json
+import os
+import re
+import subprocess
+import tempfile
+import time
+
+from agent_usage_monitor import accounts, claude_usage, proc as procs, store
+
+TIMEOUT = 30.0
+VERSION_TIMEOUT = 10.0
+POLL = 0.5
+THROTTLE = 240  # under the LaunchAgent's 300 s, so a run starting a few seconds early still probes
+ARGS = ["-p", "--no-session-persistence", "--strict-mcp-config", "--settings",
+        '{"remoteControlAtStartup":false,"disableAllHooks":true}', "--model", "sonnet", "--effort", "low", "/usage"]
+UNKNOWN_VERSION = "unknown"
+_VERSION = re.compile(r"\d{1,6}\.\d{1,6}\.\d{1,6}\S{0,30}( \(Claude Code\))?")  # at most 64 chars
+DESCRIPTIONS = {
+    "auth": "not logged in or login expired; run claude and /login",
+    "usage_error": "claude could not load usage data; try again later",
+    "loading": "usage data was still loading",
+    "timeout": "no usable output (timed out, empty output or non-zero exit)",
+}
+
+
+def config_dir_of(account, environ):
+    """CLAUDE_CONFIG_DIR for the probe: None for ~/.claude, else the account's dir.
+
+    Set, even to ~/.claude, claude looks for a login item named after the dir and reads as logged out (TASK-583).
+    """
+    return None if account.dir == accounts.expand("~/.claude", environ) else account.dir
+
+
+def _environment(environ, probe_dir, config_dir):
+    drop = {"CLAUDE_CONFIG_DIR", "CLAUDE_CODE_OAUTH_TOKEN"}
+    env = {k: v for k, v in environ.items() if k not in drop and not k.startswith("ANTHROPIC_")}
+    env.update(DISABLE_AUTOUPDATER="1", PWD=probe_dir)
+    if config_dir is not None:
+        env["CLAUDE_CONFIG_DIR"] = config_dir
+    return env
+
+
+def _prepare(state_dir):
+    """Create <state>/probe/ (0700) with CodexBar's .claude/settings.local.json; return its realpath."""
+    store.ensure_dir(state_dir)
+    probe_dir = os.path.join(state_dir, "probe")
+    os.makedirs(probe_dir, mode=0o700, exist_ok=True)
+    os.chmod(probe_dir, 0o700)
+    settings_dir = os.path.join(probe_dir, ".claude")
+    os.makedirs(settings_dir, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=settings_dir, prefix=".settings.", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump({"disableDeepLinkRegistration": "disable"}, f)
+        os.replace(tmp, os.path.join(settings_dir, "settings.local.json"))
+    except BaseException:
+        os.unlink(tmp)
+        raise
+    return os.path.realpath(probe_dir)
+
+
+def _run(args, probe_dir, env, timeout):
+    """Return (stdout, stderr, exit code or None on timeout); raise OSError when claude cannot start."""
+    proc = procs.popen(["claude"] + args, cwd=probe_dir, env=env, stdin=subprocess.DEVNULL,
+                       stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    deadline = time.monotonic() + timeout
+    exited = False
+    try:
+        while True:
+            try:
+                out, err = proc.communicate(timeout=max(0, min(POLL, deadline - time.monotonic())))
+                break
+            except subprocess.TimeoutExpired as e:
+                # a child claude left behind can hold the pipes open: once claude has exited, take
+                # what one more slice reads
+                if exited or time.monotonic() >= deadline:
+                    out, err = e.output or b"", e.stderr or b""
+                    break
+                exited = proc.poll() is not None
+        code = proc.poll()
+    finally:
+        procs.stop(proc)
+    return out.decode("utf-8", "replace"), err.decode("utf-8", "replace"), code
+
+
+def _version(probe_dir, env, timeout):
+    """The first stdout line of `claude --version` when it is a version, else None."""
+    try:
+        out, _, code = _run(["--version"], probe_dir, env, timeout)
+    except OSError:
+        return None
+    lines = out.strip().splitlines()
+    line = lines[0].strip() if code == 0 and lines else ""
+    return line if _VERSION.fullmatch(line) else None
+
+
+def _logged_out(probe_dir, env, timeout):
+    """True only when `claude auth status --json` says loggedIn false (it exits 1 then); False when unknown."""
+    try:
+        out, _, _ = _run(["auth", "status", "--json"], probe_dir, env, timeout)
+    except OSError:
+        return False
+    try:
+        status = json.loads(out)
+    except (ValueError, RecursionError):
+        return False
+    return isinstance(status, dict) and status.get("loggedIn") is False
+
+
+def refresh(name, row, state_dir, environ, config_dir=None, now=None, timeout=TIMEOUT,
+            version_timeout=VERSION_TIMEOUT):
+    """Probe one account; return (fields to merge, kept, stderr line or None).
+
+    kept: the row keeps its snapshot values (store.write's failed set). An `auth` result never disables the
+    probe and clears an earlier disable (TASK-873), so logging in recovers the account on the next run.
+    A disable, new or kept, clears needs_login: auth status has just said the account is not logged out.
+    """
+    now = int(time.time()) if now is None else now
+    fetched = row.get("fetched_at")
+    if fetched is not None and 0 <= now - fetched < THROTTLE:
+        return {}, True, None
+    prefix = "agent-usage-monitor: claude %s: " % name
+    try:
+        probe_dir = _prepare(state_dir)
+    except OSError as e:
+        return {}, True, prefix + "cannot prepare probe dir: %s" % procs.reason(e)
+    env = _environment(environ, probe_dir, config_dir)
+    auth = ({"needs_login": True, "usage_disabled_version": None}, True, prefix + "auth: " + DESCRIPTIONS["auth"])
+
+    disabled = row.get("usage_disabled_version")
+    if disabled is not None:
+        current = _version(probe_dir, env, version_timeout)
+        if current is None or current == disabled:
+            # logged out explains the output that disabled it (before TASK-873 that was `unrecognized`)
+            if _logged_out(probe_dir, env, version_timeout):
+                return auth
+            return {"needs_login": False}, True, prefix + ("probe disabled for %s; delete usage_disabled_version "
+                                                           "from the snapshot to retry" % disabled)
+
+    try:
+        out, err, code = _run(ARGS, probe_dir, env, timeout)
+    except OSError as e:
+        return {}, True, prefix + "cannot start claude: %s" % procs.reason(e)
+    try:
+        parsed = claude_usage.parse(out + "\n" + err)
+    except claude_usage.UsageError as e:
+        kind = e.kind
+    else:
+        kind = None
+    if kind not in ("auth", "usage_error", "loading") and (code != 0 or not out.strip()):
+        kind = "timeout"
+    # logged out, /usage prints only the session cost screen and no auth error (TASK-873); a hung probe skips this
+    if kind in ("unrecognized", "timeout") and code is not None and _logged_out(probe_dir, env, version_timeout):
+        kind = "auth"
+    if kind is None:
+        fields = dict(claude_usage.make_windows(parsed, now), fetched_at=now, source="usage",
+                      usage_disabled_version=None, needs_login=False)
+        return fields, False, None
+    if kind == "auth":
+        return auth
+    if kind != "unrecognized":
+        return {}, True, prefix + "%s: %s" % (kind, DESCRIPTIONS[kind])
+    version = _version(probe_dir, env, version_timeout)
+    if version is None:
+        return ({"usage_disabled_version": UNKNOWN_VERSION, "needs_login": False}, True,
+                prefix + "unrecognized: output not recognized; version unknown, probe disabled until "
+                "claude --version answers or usage_disabled_version is deleted from the snapshot")
+    return ({"usage_disabled_version": version, "needs_login": False}, True,
+            prefix + "unrecognized: output not recognized; probe disabled for %s until claude changes version" % version)

@@ -1,0 +1,29 @@
+name: check
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: make check
+    runs-on: macos-26
+    env:
+      # Build with the Command Line Tools like a user does, not the image's default Xcode.
+      DEVELOPER_DIR: /Library/Developer/CommandLineTools
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # The pull request's commits, for the scan below.
+          fetch-depth: 0
+      # NFR-4: the pre-push hook's commit scan, for pushes that skipped it (--no-verify, no `make hooks`).
+      # HEAD is the pull request's merge commit: HEAD^1 the base, HEAD^2 the pull request's head.
+      - name: pii-scan pull request commits
+        if: github.event_name == 'pull_request'
+        run: /usr/bin/python3 tests/pii_scan.py --commits HEAD^1..HEAD^2
+      - run: make check
