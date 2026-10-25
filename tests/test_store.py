@@ -44,7 +44,8 @@ class WriteTest(Base):
         self.assertEqual(self.row("b"), {
             "name": "b", "client": "claude", "dir": "/d/b", "available": None, "available_at": None,
             "five_hour": w(None), "seven_day": w(None), "fetched_at": None, "source": "none",
-            "stale": False, "usage_disabled_version": None, "needs_login": False, "account": None})
+            "stale": False, "usage_disabled_version": None, "unrecognized_count": 0, "unrecognized_version": None,
+            "needs_login": False, "account": None})
 
     def test_update_recomputes(self):
         self.write({"a": {"five_hour": w(10, NOW + H), "seven_day": w(10, NOW + H), "fetched_at": NOW,
