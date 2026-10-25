@@ -117,7 +117,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, UNUs
 
     /// A click during a run that does not retry makes the next run retry; one during a run that retries does not, so a
     /// double tap retries once (WDRC-101).
-    private func refresh(retryPaused: Bool = false) {
+    private func refresh(retryPaused: Bool) {
         if running {
             pendingClick = true
             pendingRetry = queuesRetry(pending: pendingRetry, retrying: retrying, retryPaused: retryPaused)
@@ -313,7 +313,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, UNUs
         window.center()
         window.makeKeyAndOrderFront(nil)
         settings = window
-        settingsTimer = Timer.scheduledTimer(withTimeInterval: settingsRefresh, repeats: true) { _ in self.refresh() }
+        settingsTimer = Timer.scheduledTimer(withTimeInterval: settingsRefresh, repeats: true) { _ in
+            self.refresh(retryPaused: retriesPaused(urls: []))
+        }
         model.onSave = { self.save() }
         cli("read-accounts", timeout: settingsTimeout) { status, output in
             if status == 0, let file = lastLine(AccountsFile.self, output) {
@@ -333,7 +335,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, UNUs
         cli("write-accounts", input: request, timeout: settingsTimeout) { status, output in
             self.model.save.saveEnded(written: status == 0)
             if status == 0 {
-                self.refresh()
+                self.refresh(retryPaused: retriesPaused(urls: []))
             } else if status == 1, let result = lastLine(SaveProblems.self, output) {
                 self.model.failed(result.problems)
             } else {

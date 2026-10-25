@@ -307,11 +307,12 @@ check("settings_terminal", opensSettings(xpcServiceName: "0", urls: []), false)
 check("settings_none", opensSettings(xpcServiceName: nil, urls: []), false)
 
 // WDRC-100: a widget click (the refresh URL, or any URL that does not open settings) passes --retry-paused; launchd's
-// runs and the settings window's timer and Save (no URL) do not
+// runs and the settings window's timer and Save (no URL) do not. WDRC-101: the timer and Save call
+// refresh(retryPaused: retriesPaused(urls: [])), pinned here.
 check("retry_paused_click", collectArgs(retryPaused: retriesPaused(urls: [refreshURL])),
       "collect --emit-alerts --retry-paused")
 check("retry_paused_other_url", retriesPaused(urls: [URL(string: "agent-usage-monitor://other")!]), true)
-check("retry_paused_timer", collectArgs(retryPaused: retriesPaused(urls: [])), "collect --emit-alerts")
+check("retry_paused_timer_save", collectArgs(retryPaused: retriesPaused(urls: [])), "collect --emit-alerts")
 check("retry_paused_settings", retriesPaused(urls: [settingsURL]), false)
 check("retry_paused_settings_among", retriesPaused(urls: [refreshURL, settingsURL]), false)
 
