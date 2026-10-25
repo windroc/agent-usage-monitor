@@ -71,6 +71,7 @@ final class Delivery {
 
 final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, UNUserNotificationCenterDelegate {
     private var pendingClick = false
+    private var pendingRetry = false
     private var timedOut = false
     private var running = false
     private var launched = false
@@ -92,7 +93,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, UNUs
     }
 
     private func open(xpcServiceName: String?, urls: [URL]) {
-        if opensSettings(xpcServiceName: xpcServiceName, urls: urls) { showSettings() } else { refresh() }
+        if opensSettings(xpcServiceName: xpcServiceName, urls: urls) {
+            showSettings()
+        } else {
+            refresh(retryPaused: retriesPaused(urls: urls))
+        }
     }
 
     // While this host runs, opening the app from Finder, Spotlight or the Dock arrives as a reopen; a widget click
@@ -108,15 +113,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, UNUs
         completionHandler([.banner, .list])
     }
 
-    private func refresh() {
-        if running { pendingClick = true } else { run() }
+    /// A click during a run that did not retry makes the next run retry.
+    private func refresh(retryPaused: Bool = false) {
+        if running {
+            pendingClick = true
+            pendingRetry = pendingRetry || retryPaused
+        } else {
+            run(retryPaused: retryPaused)
+        }
     }
 
-    private func run() {
+    private func run(retryPaused: Bool) {
         running = true
         timedOut = false
         model.save.collectStarted()
-        cli("collect --emit-alerts", timeout: collectTimeout) { status, output in
+        cli(collectArgs(retryPaused: retryPaused), timeout: collectTimeout) { status, output in
             self.timedOut = status == nil
             self.model.save.collectEnded(status)
             self.finished(output)
@@ -263,10 +274,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, UNUs
             self.record(sent) {
                 DispatchQueue.main.asyncAfter(deadline: .now() + exitDelay) {
                     let again = self.pendingClick && !self.timedOut
+                    let retry = self.pendingRetry
                     self.pendingClick = false
+                    self.pendingRetry = false
                     self.running = false
                     if again {
-                        self.run()
+                        self.run(retryPaused: retry)
                     } else {
                         self.model.save.collectDropped()
                         if self.settings == nil { NSApp.terminate(nil) }
