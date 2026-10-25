@@ -315,6 +315,13 @@ check("retry_paused_timer", collectArgs(retryPaused: retriesPaused(urls: [])), "
 check("retry_paused_settings", retriesPaused(urls: [settingsURL]), false)
 check("retry_paused_settings_among", retriesPaused(urls: [refreshURL, settingsURL]), false)
 
+// WDRC-101: a click during a run that retries queues no second retry, so a double tap retries once; one during a run
+// that does not retry makes the next run retry
+check("queues_retry_click_retrying", queuesRetry(pending: false, retrying: true, retryPaused: true), false)
+check("queues_retry_click_not_retrying", queuesRetry(pending: false, retrying: false, retryPaused: true), true)
+check("queues_retry_pending_kept", queuesRetry(pending: true, retrying: false, retryPaused: false), true)
+check("queues_retry_timer", queuesRetry(pending: false, retrying: false, retryPaused: false), false)
+
 // read-accounts output: the last line, after anything the login shell prints
 let read = lastLine(AccountsFile.self, Data("""
 Last login: Mon

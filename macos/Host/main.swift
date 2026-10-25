@@ -72,6 +72,8 @@ final class Delivery {
 final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, UNUserNotificationCenterDelegate {
     private var pendingClick = false
     private var pendingRetry = false
+    /// The running run's retryPaused.
+    private var retrying = false
     private var timedOut = false
     private var running = false
     private var launched = false
@@ -113,11 +115,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, UNUs
         completionHandler([.banner, .list])
     }
 
-    /// A click during a run that did not retry makes the next run retry.
+    /// A click during a run that does not retry makes the next run retry; one during a run that retries does not, so a
+    /// double tap retries once (WDRC-101).
     private func refresh(retryPaused: Bool = false) {
         if running {
             pendingClick = true
-            pendingRetry = pendingRetry || retryPaused
+            pendingRetry = queuesRetry(pending: pendingRetry, retrying: retrying, retryPaused: retryPaused)
         } else {
             run(retryPaused: retryPaused)
         }
@@ -125,6 +128,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, UNUs
 
     private func run(retryPaused: Bool) {
         running = true
+        retrying = retryPaused
         timedOut = false
         model.save.collectStarted()
         cli(collectArgs(retryPaused: retryPaused), timeout: collectTimeout) { status, output in
