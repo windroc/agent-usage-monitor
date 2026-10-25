@@ -4,13 +4,15 @@ import signal
 import subprocess
 import time
 import unittest
+from unittest import mock
 
+from agent_usage_monitor import accounts, cli, codex
 from tests.helpers import (BIN, Env, claude_calls, install_fake_claude, install_fake_codex, pids, rate_limits, reaped,
                            received, window)
 
 ROW_KEYS = {"name", "client", "dir", "available", "available_at", "five_hour", "seven_day",
             "fetched_at", "source", "stale", "usage_disabled_version", "unrecognized_count", "unrecognized_version",
-            "needs_login", "account"}
+            "needs_login", "error", "account"}
 
 
 class CollectTest(unittest.TestCase):
@@ -101,7 +103,8 @@ class CollectTest(unittest.TestCase):
             "five_hour": {"used_percent": None, "resets_at": None},
             "seven_day": {"used_percent": None, "resets_at": None},
             "fetched_at": None, "source": "none", "stale": False, "usage_disabled_version": None,
-            "unrecognized_count": 0, "unrecognized_version": None, "needs_login": False, "account": None})
+            "unrecognized_count": 0, "unrecognized_version": None, "needs_login": False, "error": None,
+            "account": None})
 
     def test_claude_row_recomputed(self):
         self.env.mkdir(".claude")
@@ -176,6 +179,29 @@ class CollectTest(unittest.TestCase):
         self.assertEqual((n["source"], n["five_hour"], n["available"]),
                          ("none", {"used_percent": None, "resets_at": None}, None))
         self.assertEqual(self.row("ok")["source"], "app-server")
+        # WDRC-98: the reason, without the log line's prefix
+        self.assertEqual((f["error"], n["error"], self.row("ok")["error"]),
+                         ("app-server exited before replying", "app-server exited before replying", None))
+
+    def test_codex_error_each_kind(self):
+        """WDRC-98: every ProbeError text becomes the row's error as is."""
+        account = accounts.Account("c", "codex", "/d/c")
+        for text in ("cannot start codex: ENOENT", "timed out after 10 s", "app-server exited before replying",
+                     "app-server error -32600", "app-server error", "unrecognized output", "unrecognized reply",
+                     "app-server i/o failed: EPIPE"):
+            with self.subTest(text=text), mock.patch.object(codex, "probe", side_effect=codex.ProbeError(text)):
+                self.assertEqual(cli._codex(account, {}), ({"error": text}, True, "agent-usage-monitor: codex c: " + text))
+
+    def test_codex_error_cleared_on_success(self):
+        later = int(time.time()) + 3600
+        flaky = self.codex_account("flaky", exit=1)
+        self.env.write_accounts({"accounts": [flaky]})
+        self.collect()
+        self.assertEqual(self.row("flaky")["error"], "app-server exited before replying")
+        install_fake_codex(self.env, flaky["dir"], result=rate_limits(window(30, 300, later), window(40, 10080, later)))
+        self.collect()
+        row = self.row("flaky")
+        self.assertEqual((row["error"], row["source"]), (None, "app-server"))
 
     def test_stuck_probes_hold_up_only_their_rows(self):
         later = int(time.time()) + 3600
