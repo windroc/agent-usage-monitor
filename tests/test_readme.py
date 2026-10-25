@@ -65,6 +65,15 @@ class ReadmeTest(unittest.TestCase):
         self.assertIn("keeps its bars", self.text)
         self.assertNotIn("The client starts with `⚠`", self.text)
 
+    def test_paused_retry(self):
+        """WDRC-100: a paused Claude probe retries on a widget click and 6 hours after its pause started."""
+        self.assertIn("A paused account runs its probe once more when you click the widget (`collect --retry-paused`) "
+                      "and once its pause is 6 hours old (`usage_disabled_at`", self.text)
+        self.assertIn("A pause recorded before `usage_disabled_at` existed retries on the next run", self.text)
+        self.assertIn("a widget click adds `--retry-paused`", self.text)
+        self.assertNotIn("Delete `usage_disabled_version`", self.text)
+        self.assertNotIn("so it only collects and refreshes, as before", self.text)
+
 
 if __name__ == "__main__":
     unittest.main()
