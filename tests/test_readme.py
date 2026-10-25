@@ -66,10 +66,13 @@ class ReadmeTest(unittest.TestCase):
         self.assertNotIn("The client starts with `⚠`", self.text)
 
     def test_paused_retry(self):
-        """WDRC-100: a paused Claude probe retries on a widget click and 6 hours after its pause started."""
+        """WDRC-100: a paused Claude probe retries on a widget click and on a backoff from 5 minutes to 6 hours."""
         self.assertIn("A paused account runs its probe once more when you click the widget (`collect --retry-paused`) "
-                      "and once its pause is 6 hours old (`usage_disabled_at`", self.text)
-        self.assertIn("A pause recorded before `usage_disabled_at` existed retries on the next run", self.text)
+                      "and on a backoff: first 5 minutes after the pause, then each failed retry doubles the wait "
+                      "(10, 20, 40 minutes, …) up to 6 hours", self.text)
+        self.assertIn("(`usage_disabled_at`, when it paused or last retried, and `usage_retry_after_s`", self.text)
+        self.assertIn("A pause recorded without that schedule retries on the next run", self.text)
+        self.assertNotIn("once its pause is 6 hours old", self.text)
         self.assertIn("a widget click adds `--retry-paused`", self.text)
         self.assertNotIn("Delete `usage_disabled_version`", self.text)
         self.assertNotIn("so it only collects and refreshes, as before", self.text)
