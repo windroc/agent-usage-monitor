@@ -15,22 +15,18 @@ LOGGED_OUT_STATUS = json.dumps({"loggedIn": False, "authMethod": "none", "apiPro
 AUTH_STATUS = ["auth", "status", "--json"]
 AUTH_FIELDS = {"needs_login": True, "usage_disabled_version": None, "error": None}
 VERSION = "2.1.302 (Claude Code)"
-UNKNOWN_PAUSED = "/usage output not recognized, paused (claude version unknown)"
-
-
-def paused(version=VERSION):
-    """The row's error while the probe is disabled for version (WDRC-98)."""
-    return "/usage output not recognized, paused for claude %s" % version.replace(" (Claude Code)", "")
+# The row's error while the probe is disabled, for any version (WDRC-98): short enough for the large widget
+PAUSED = "/usage unreadable · paused"
 
 
 def disabled(version=VERSION):
     """Fields of the disabling result; auth status has just said not logged out."""
     return {"usage_disabled_version": version, "unrecognized_count": 0, "unrecognized_version": None,
-            "needs_login": False, "error": UNKNOWN_PAUSED if version == "unknown" else paused(version)}
+            "needs_login": False, "error": PAUSED}
 
 
 # a disabled row kept disabled
-KEPT_DISABLED = {"needs_login": False, "error": paused()}
+KEPT_DISABLED = {"needs_login": False, "error": PAUSED}
 NOW = 1792213644  # 2026-10-17T05:07:24Z, the A1 run
 
 
@@ -182,20 +178,13 @@ class RefreshTest(unittest.TestCase):
                     self.assertNotIn(raw, message)
                 self.assertEqual(fields, expected)
 
-    def test_short_version(self):
-        for version, short in (("2.1.302 (Claude Code)", "2.1.302"), ("2.1.302", "2.1.302"),
-                               ("2.1.302-beta.1 (Claude Code)", "2.1.302-beta.1"), ("unknown", None),
-                               ("/Users/u/x", None), ("", None), (None, None), (2, None)):
-            with self.subTest(version=version):
-                self.assertEqual(claude._short_version(version), short)
-
     def test_disabled_version_unknown_or_unreadable(self):
-        """WDRC-98: a kept-disabled row whose version is unknown, or not a version at all, names no version."""
+        """WDRC-98: a kept-disabled row whose version is unknown, or not a version at all, has the same reason."""
         install_fake_claude(self.env, stdout=USAGE, version_exit=1)
         for value in ("unknown", "/Users/u/secret"):
             with self.subTest(value=value):
                 fields, kept, _ = self.refresh(fresh_row(usage_disabled_version=value))
-                self.assertEqual((fields, kept), ({"needs_login": False, "error": UNKNOWN_PAUSED}, True))
+                self.assertEqual((fields, kept), ({"needs_login": False, "error": PAUSED}, True))
 
     def test_logged_out(self):
         """TASK-873: a logged-out account's /usage shows only the cost screen; auth status tells why."""

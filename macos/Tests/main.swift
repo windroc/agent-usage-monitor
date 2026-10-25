@@ -62,7 +62,7 @@ check("stale_title", [staleTitle[0].title], ["claude"])
 check("stale_title_marked", [staleTitle[0].stale], [true])
 
 // stale_error (WDRC-98): the reason replaces the bars, like the login notice; the triangle and account stay
-let reason = "/usage output not recognized, paused for claude 2.1.302"
+let reason = "/usage unreadable · paused"
 check("stale_error", show([row("a", five: 40, seven: 10, available: true, stale: true, source: "cache",
                                resets: (t + 60, t + 120), account: "you@example.com", error: reason)]),
       [DisplayRow(title: "claude", client: "claude", account: "you@example.com", bars: [], notice: reason, stale: true)])

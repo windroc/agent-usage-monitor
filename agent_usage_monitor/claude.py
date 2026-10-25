@@ -31,7 +31,8 @@ DESCRIPTIONS = {
 }
 # The row's error (WDRC-98), which the widget shows: short, and never a path, an account or raw output
 REASONS = {"usage_error": "claude could not load usage data", "loading": "usage data still loading"}
-_SUFFIX = " (Claude Code)"
+# disabled, for any version: short enough for the large widget; the log line names the version
+PAUSED = "/usage unreadable · paused"
 
 
 def config_dir_of(account, environ):
@@ -122,20 +123,6 @@ def _version(probe_dir, env, timeout):
     return line if _VERSION.fullmatch(line) else None
 
 
-def _short_version(version):
-    """version without its ` (Claude Code)` suffix when it is a `claude --version` line, else None."""
-    if not isinstance(version, str) or not _VERSION.fullmatch(version):
-        return None
-    return version[:-len(_SUFFIX)] if version.endswith(_SUFFIX) else version
-
-
-def _paused(version):
-    short = _short_version(version)
-    if short is None:
-        return "/usage output not recognized, paused (claude version unknown)"
-    return "/usage output not recognized, paused for claude %s" % short
-
-
 def _timeout_reason(code):
     if code is None:
         return "timed out"
@@ -193,7 +180,7 @@ def refresh(name, row, state_dir, environ, config_dir=None, now=None, timeout=TI
             # logged out explains the output that disabled it (before TASK-873 that was `unrecognized`)
             if _logged_out(probe_dir, env, version_timeout):
                 return auth
-            return failed(_paused(disabled), "probe disabled for %s; delete usage_disabled_version from the "
+            return failed(PAUSED, "probe disabled for %s; delete usage_disabled_version from the "
                           "snapshot to retry" % disabled, needs_login=False)
 
     try:
@@ -241,7 +228,7 @@ def refresh(name, row, state_dir, environ, config_dir=None, now=None, timeout=TI
               "needs_login": False}
     message = "unrecognized: output not recognized %d times; " % count
     if version == UNKNOWN_VERSION:
-        return failed(_paused(version), message + "version unknown, probe disabled until claude --version answers or "
+        return failed(PAUSED, message + "version unknown, probe disabled until claude --version answers or "
                       "usage_disabled_version is deleted from the snapshot; " + capture, **fields)
-    return failed(_paused(version), message + "probe disabled for %s until claude changes version; %s"
+    return failed(PAUSED, message + "probe disabled for %s until claude changes version; %s"
                   % (version, capture), **fields)
