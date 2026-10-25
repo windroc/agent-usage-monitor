@@ -45,7 +45,21 @@ class WriteTest(Base):
             "name": "b", "client": "claude", "dir": "/d/b", "available": None, "available_at": None,
             "five_hour": w(None), "seven_day": w(None), "fetched_at": None, "source": "none",
             "stale": False, "usage_disabled_version": None, "unrecognized_count": 0, "unrecognized_version": None,
-            "needs_login": False, "account": None})
+            "needs_login": False, "error": None, "account": None})
+
+    def test_old_row_without_error(self):
+        """WDRC-98: a row written before `error` existed reads as no error; a failed run's reason replaces it."""
+        os.makedirs(self.dir)
+        with open(self.env.snapshot_path, "w") as f:
+            json.dump({"schema": 1, "accounts": [{"name": "a", "five_hour": None, "seven_day": w(1, 2),
+                                                  "fetched_at": NOW - 60}]}, f)
+        self.write()
+        self.assertIsNone(self.row("a")["error"])
+        self.assertEqual(self.snap()["schema"], 1)
+        self.write({"a": {"error": "timed out after 10 s"}}, failed=["a"])
+        self.assertEqual((self.row("a")["error"], self.row("a")["source"]), ("timed out after 10 s", "cache"))
+        self.write(failed=["a"])
+        self.assertEqual(self.row("a")["error"], "timed out after 10 s", "a skipped run keeps the reason")
 
     def test_update_recomputes(self):
         self.write({"a": {"five_hour": w(10, NOW + H), "seven_day": w(10, NOW + H), "fetched_at": NOW,

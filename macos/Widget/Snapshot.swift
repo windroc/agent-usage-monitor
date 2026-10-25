@@ -18,6 +18,8 @@ struct Row: Decodable, Equatable {
     let stale: Bool?
     /// TASK-873: `claude` reports the account logged out; absent in snapshots from before it.
     var needsLogin: Bool? = nil
+    /// WDRC-98: why the last probe failed, short and free of personal data; absent in snapshots from before it.
+    var error: String? = nil
 }
 
 struct Snapshot: Decodable, Equatable {
@@ -67,8 +69,10 @@ struct DisplayRow: Equatable {
     let client: String?
     var account: String? = nil
     let bars: [Bar]
-    /// Shown instead of the bars (needs login); the row keeps its heights.
+    /// Shown instead of the bars (needs login, or a stale row's reason); the row keeps its heights.
     var notice: String? = nil
+    /// The values are older than 6 hours: a red triangle before the title (WDRC-98).
+    var stale = false
 
     /// The bar whose reset line also carries the account, on its left: the last one with a reset.
     var accountBar: Int? { account == nil ? nil : bars.lastIndex { $0.reset != nil } }
@@ -120,21 +124,28 @@ func loadSnapshot(path: String) -> Snapshot? {
 }
 
 func rows(_ snapshot: Snapshot, now: Int) -> [DisplayRow] {
-    // A null window (the account has no such limit) gets no row. ⚠ leads: a long title loses its tail, not the ⚠.
+    // A null window (the account has no such limit) gets no row.
     // The title is the client; the name stands in only for a row without one.
-    // Needs login: its last values say nothing until then, so the notice replaces the bars and the ⚠ (TASK-873).
+    // Needs login: its last values say nothing until then, so the notice replaces the bars and the triangle (TASK-873).
+    // The reason replaces the bars only when they hold no current values, stale or none yet (WDRC-98): a row
+    // under 6 hours old keeps its values through a failed run.
     snapshot.accounts.map { row in
+        let title = row.client ?? row.name
         if row.needsLogin == true {
-            return DisplayRow(title: row.client ?? row.name, client: row.client, account: row.account, bars: [],
-                              notice: loginNotice)
+            return DisplayRow(title: title, client: row.client, account: row.account, bars: [], notice: loginNotice)
         }
-        return DisplayRow(title: (row.stale == true ? "⚠ " : "") + (row.client ?? row.name), client: row.client,
-                          account: row.account,
+        let stale = row.stale == true
+        if let error = row.error, stale || row.source == "none" {
+            return DisplayRow(title: title, client: row.client, account: row.account, bars: [], notice: error,
+                              stale: stale)
+        }
+        return DisplayRow(title: title, client: row.client, account: row.account,
                           bars: [("5H", row.fiveHour), ("7D", row.sevenDay)].compactMap { label, window in
                               window.map {
                                   Bar(label: label, percent: $0.usedPercent, reset: resetText($0.resetsAt, now: now))
                               }
-                          })
+                          },
+                          stale: stale)
     }
 }
 

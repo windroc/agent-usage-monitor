@@ -58,6 +58,13 @@ class ReadmeTest(unittest.TestCase):
         self.assertIn("A small grey refresh arrow just left of the gear does the same", self.text)
         self.assertIn("the arrow and the gear; click the widget or the arrow to collect", self.text)
 
+    def test_stale_reason(self):
+        """WDRC-98: the red triangle and the reason notice replace the `⚠` prefix."""
+        self.assertIn("a red triangle precedes the client", self.text)
+        self.assertIn("(`error` in its snapshot row", self.text)
+        self.assertIn("keeps its bars", self.text)
+        self.assertNotIn("The client starts with `⚠`", self.text)
+
 
 if __name__ == "__main__":
     unittest.main()

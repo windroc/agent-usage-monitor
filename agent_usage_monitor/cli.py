@@ -13,8 +13,9 @@ def _codex(account, environ):
     try:
         windows = codex.probe(account.dir, environ)
     except codex.ProbeError as e:
-        return {}, True, "agent-usage-monitor: codex %s: %s" % (account.name, e)
-    return dict(windows, fetched_at=int(time.time()), source="app-server"), False, None
+        # the ProbeError texts hold no path or account data, so the widget can show them (WDRC-98)
+        return {"error": str(e)}, True, "agent-usage-monitor: codex %s: %s" % (account.name, e)
+    return dict(windows, fetched_at=int(time.time()), source="app-server", error=None), False, None
 
 
 PREFIX = "AUM-ALERT "
