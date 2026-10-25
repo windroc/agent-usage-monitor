@@ -29,6 +29,9 @@ DESCRIPTIONS = {
     "loading": "usage data was still loading",
     "timeout": "no usable output (timed out, empty output or non-zero exit)",
 }
+# The row's error (WDRC-98), which the widget shows: short, and never a path, an account or raw output
+REASONS = {"usage_error": "claude could not load usage data", "loading": "usage data still loading"}
+_SUFFIX = " (Claude Code)"
 
 
 def config_dir_of(account, environ):
@@ -119,6 +122,28 @@ def _version(probe_dir, env, timeout):
     return line if _VERSION.fullmatch(line) else None
 
 
+def _short_version(version):
+    """version without its ` (Claude Code)` suffix when it is a `claude --version` line, else None."""
+    if not isinstance(version, str) or not _VERSION.fullmatch(version):
+        return None
+    return version[:-len(_SUFFIX)] if version.endswith(_SUFFIX) else version
+
+
+def _paused(version):
+    short = _short_version(version)
+    if short is None:
+        return "/usage output not recognized, paused (claude version unknown)"
+    return "/usage output not recognized, paused for claude %s" % short
+
+
+def _timeout_reason(code):
+    if code is None:
+        return "timed out"
+    if code != 0:
+        return "claude exited with code %d" % code
+    return "no output from claude"
+
+
 def _logged_out(probe_dir, env, timeout):
     """True only when `claude auth status --json` says loggedIn false (it exits 1 then); False when unknown."""
     try:
@@ -141,19 +166,25 @@ def refresh(name, row, state_dir, environ, config_dir=None, now=None, timeout=TI
     An `unrecognized` result disables it only as the DISABLE_AFTER-th in a row on one claude version
     (unrecognized_count, unrecognized_version); a success or a disable resets the count (WDRC-97).
     An unrecognized result or a disable, new or kept, clears needs_login: auth status has just said the account
-    is not logged out.
+    is not logged out. Every result but a throttled skip sets error: the failure's reason, or None (WDRC-98).
     """
     now = int(time.time()) if now is None else now
     fetched = row.get("fetched_at")
     if fetched is not None and 0 <= now - fetched < THROTTLE:
         return {}, True, None
     prefix = "agent-usage-monitor: claude %s: " % name
+
+    def failed(reason, log, **fields):
+        return dict(fields, error=reason), True, prefix + log
+
     try:
         probe_dir = _prepare(state_dir)
     except OSError as e:
-        return {}, True, prefix + "cannot prepare probe dir: %s" % procs.reason(e)
+        reason = "cannot prepare probe dir: %s" % procs.reason(e)
+        return failed(reason, reason)
     env = _environment(environ, probe_dir, config_dir)
-    auth = ({"needs_login": True, "usage_disabled_version": None}, True, prefix + "auth: " + DESCRIPTIONS["auth"])
+    # the login notice is its reason
+    auth = failed(None, "auth: " + DESCRIPTIONS["auth"], needs_login=True, usage_disabled_version=None)
 
     disabled = row.get("usage_disabled_version")
     if disabled is not None:
@@ -162,13 +193,14 @@ def refresh(name, row, state_dir, environ, config_dir=None, now=None, timeout=TI
             # logged out explains the output that disabled it (before TASK-873 that was `unrecognized`)
             if _logged_out(probe_dir, env, version_timeout):
                 return auth
-            return {"needs_login": False}, True, prefix + ("probe disabled for %s; delete usage_disabled_version "
-                                                           "from the snapshot to retry" % disabled)
+            return failed(_paused(disabled), "probe disabled for %s; delete usage_disabled_version from the "
+                          "snapshot to retry" % disabled, needs_login=False)
 
     try:
         out, err, code = _run(ARGS, probe_dir, env, timeout)
     except OSError as e:
-        return {}, True, prefix + "cannot start claude: %s" % procs.reason(e)
+        reason = "cannot start claude: %s" % procs.reason(e)
+        return failed(reason, reason)
     try:
         parsed = claude_usage.parse(out + "\n" + err)
     except claude_usage.UsageError as e:
@@ -182,12 +214,14 @@ def refresh(name, row, state_dir, environ, config_dir=None, now=None, timeout=TI
         kind = "auth"
     if kind is None:
         fields = dict(claude_usage.make_windows(parsed, now), fetched_at=now, source="usage",
-                      usage_disabled_version=None, unrecognized_count=0, unrecognized_version=None, needs_login=False)
+                      usage_disabled_version=None, unrecognized_count=0, unrecognized_version=None, needs_login=False,
+                      error=None)
         return fields, False, None
     if kind == "auth":
         return auth
     if kind != "unrecognized":
-        return {}, True, prefix + "%s: %s" % (kind, DESCRIPTIONS[kind])
+        reason = _timeout_reason(code) if kind == "timeout" else REASONS[kind]
+        return failed(reason, "%s: %s" % (kind, DESCRIPTIONS[kind]))
     path = capture_path(probe_dir, name)
     try:
         _save_capture(path, out, err)
@@ -198,14 +232,16 @@ def refresh(name, row, state_dir, environ, config_dir=None, now=None, timeout=TI
     count = row.get("unrecognized_count")
     count = count + 1 if type(count) is int and row.get("unrecognized_version") == version else 1
     if count < DISABLE_AFTER:
-        return ({"unrecognized_count": count, "unrecognized_version": version, "usage_disabled_version": None,
-                 "needs_login": False}, True,
-                prefix + "unrecognized: output not recognized (%d of %d on %s); %s"
-                % (count, DISABLE_AFTER, "version unknown" if version == UNKNOWN_VERSION else version, capture))
+        return failed("/usage output not recognized (%d of %d)" % (count, DISABLE_AFTER),
+                      "unrecognized: output not recognized (%d of %d on %s); %s"
+                      % (count, DISABLE_AFTER, "version unknown" if version == UNKNOWN_VERSION else version, capture),
+                      unrecognized_count=count, unrecognized_version=version, usage_disabled_version=None,
+                      needs_login=False)
     fields = {"usage_disabled_version": version, "unrecognized_count": 0, "unrecognized_version": None,
               "needs_login": False}
-    message = prefix + "unrecognized: output not recognized %d times; " % count
+    message = "unrecognized: output not recognized %d times; " % count
     if version == UNKNOWN_VERSION:
-        return (fields, True, message + "version unknown, probe disabled until claude --version answers or "
-                "usage_disabled_version is deleted from the snapshot; " + capture)
-    return fields, True, message + "probe disabled for %s until claude changes version; %s" % (version, capture)
+        return failed(_paused(version), message + "version unknown, probe disabled until claude --version answers or "
+                      "usage_disabled_version is deleted from the snapshot; " + capture, **fields)
+    return failed(_paused(version), message + "probe disabled for %s until claude changes version; %s"
+                  % (version, capture), **fields)
