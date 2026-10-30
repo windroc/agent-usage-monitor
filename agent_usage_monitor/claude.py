@@ -164,6 +164,7 @@ def refresh(name, row, state_dir, environ, config_dir=None, now=None, timeout=TI
             version_timeout=VERSION_TIMEOUT, retry_paused=False):
     """Probe one account; return (fields to merge, kept, stderr line or None).
 
+    An account fetched under THROTTLE ago is skipped, unless retry_paused: a widget click probes at once (WDRC-480).
     kept: the row keeps its snapshot values (store.write's failed set). An `auth` result never disables the
     probe and clears an earlier disable (TASK-873), so logging in recovers the account on the next run.
     An `unrecognized` result disables it only as the DISABLE_AFTER-th in a row on one claude version
@@ -178,7 +179,7 @@ def refresh(name, row, state_dir, environ, config_dir=None, now=None, timeout=TI
     """
     now = int(time.time()) if now is None else now
     fetched = row.get("fetched_at")
-    if fetched is not None and 0 <= now - fetched < THROTTLE:
+    if not retry_paused and fetched is not None and 0 <= now - fetched < THROTTLE:
         return {}, True, None
     prefix = "agent-usage-monitor: claude %s: " % name
 

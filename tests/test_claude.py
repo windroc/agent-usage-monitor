@@ -588,11 +588,20 @@ class RefreshTest(unittest.TestCase):
         install_fake_claude(self.env, stdout="")
         self.assertEqual(self.refresh(fresh_row(usage_disabled_version=VERSION))[0], retry_failed(600))
 
-    def test_unpaused_retry_flag_no_effect(self):
-        # retry_paused touches only paused rows: the 3-strike count and the throttle stay
+    def test_unpaused_retry_flag_keeps_strikes(self):
+        # retry_paused leaves an unpaused row's 3-strike count as it is
         install_fake_claude(self.env, stdout="50% used\n")
         self.assertEqual(self.refresh(retry_paused=True)[0], strike(1))
-        self.assertEqual(self.refresh(fresh_row(fetched_at=NOW - 60), retry_paused=True), ({}, True, None))
+
+    def test_click_skips_throttle(self):
+        """WDRC-480: a widget click (retry_paused) probes an account fetched under THROTTLE ago."""
+        install_fake_claude(self.env, stdout=USAGE)
+        for fetched in (NOW - 60, NOW - 239):
+            with self.subTest(fetched=fetched):
+                fields, kept, message = self.refresh(fresh_row(fetched_at=fetched), retry_paused=True)
+                self.assertEqual((kept, message, fields["fetched_at"], fields["source"]), (False, None, NOW, "usage"))
+                self.assertEqual(fields["five_hour"]["used_percent"], 40)
+        self.assertEqual([c["argv"][-1] for c in claude_calls(self.env)].count("/usage"), 2)
 
     def test_throttle(self):
         install_fake_claude(self.env, stdout=USAGE, fail=True)
@@ -649,6 +658,15 @@ class CollectProbeTest(unittest.TestCase):
         self.collect()
         self.assertEqual(len(claude_calls(self.env)), 2)
         self.assertEqual(self.row()["source"], "usage")
+
+    def test_click_collect_skips_throttle(self):
+        """WDRC-480: a widget click right after a LaunchAgent run probes again and writes the new values."""
+        install_fake_claude(self.env, stdout=USAGE)
+        self.collect()
+        install_fake_claude(self.env, stdout=USAGE.replace("40% used", "91% used"))
+        self.collect("--retry-paused")
+        self.assertEqual(len(claude_calls(self.env)), 2)
+        self.assertEqual((self.row()["source"], self.row()["five_hour"]["used_percent"]), ("usage", 91))
 
     def test_other_accounts(self):
         """TASK-583: <dir-a> has no 5h window running, <dir-b> has one; ~/.claude is not listed."""

@@ -118,7 +118,7 @@ def main(argv=None):
     p = sub.add_parser("collect", help="read every account's limits and write the snapshot")
     p.add_argument("--emit-alerts", action="store_true", help="decide alerts and print each as an AUM-ALERT line")
     p.add_argument("--retry-paused", action="store_true",
-                   help="probe paused Claude accounts once (a widget click, WDRC-100)")
+                   help="probe Claude accounts now, paused ones once, throttle aside (a widget click, WDRC-100, WDRC-480)")
     sub.add_parser("record-alerts", help="record the AUM-ALERT lines on stdin as sent (the host, after posting them)")
     sub.add_parser("read-accounts", help="print the account list as the settings window shows it, as one JSON line")
     sub.add_parser("write-accounts", help="check and write the settings window's edit from stdin (exit 1: problems)")
