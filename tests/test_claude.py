@@ -11,6 +11,8 @@ from tests.helpers import (FIXTURES, Env, claude_calls, install_fake_claude, ins
 A1 = os.path.join(FIXTURES, "claude-usage", "A1.stdout.txt")
 # TASK-873: /usage of a logged-out account (claude 2.1.309, empty CLAUDE_CONFIG_DIR) prints only the cost screen
 LOGGED_OUT = os.path.join(FIXTURES, "claude-usage", "logged-out.stdout.txt")
+# WDRC-908: /usage right after a reset, with no `Current session` line
+NO_SESSION = os.path.join(FIXTURES, "claude-usage", "no-session.stdout.txt")
 LOGGED_OUT_STATUS = json.dumps({"loggedIn": False, "authMethod": "none", "apiProvider": "firstParty"})
 AUTH_STATUS = ["auth", "status", "--json"]
 AUTH_FIELDS = {"needs_login": True, "usage_disabled_version": None, "usage_disabled_at": None,
@@ -814,6 +816,42 @@ class CollectProbeTest(unittest.TestCase):
         row = self.row()
         self.assertEqual((row["usage_disabled_version"], row["usage_disabled_at"], row["usage_retry_after_s"],
                           row["error"], row["source"]), (None, None, None, None, "usage"))
+
+    def paused_with_values(self):
+        """A paused claude row still holding values from an hour ago: 5h 100%, 7d 14% (WDRC-908's report)."""
+        os.makedirs(self.env.state, exist_ok=True)
+        now = int(time.time())
+        with open(self.env.snapshot_path, "w") as f:
+            json.dump({"schema": 1, "accounts": [{
+                "name": "claude", "fetched_at": now - HOUR, "source": "cache", "error": PAUSED,
+                "five_hour": {"used_percent": 100, "resets_at": now + HOUR},
+                "seven_day": {"used_percent": 14, "resets_at": now + 3 * 24 * HOUR},
+                "usage_disabled_version": VERSION, "usage_disabled_at": now - 60, "usage_retry_after_s": 600}]}, f)
+
+    def test_click_reads_output_without_session(self):
+        """WDRC-908: a click on a paused account whose /usage has no `Current session` line ends the pause:
+        7d updates and the 5h window is absent, not the old 100%."""
+        install_fake_claude(self.env, stdout_file=NO_SESSION)
+        self.paused_with_values()
+        r = self.collect("--emit-alerts", "--retry-paused")
+        self.assertNotIn("claude claude:", r.stderr)
+        row = self.row()
+        self.assertEqual((row["usage_disabled_version"], row["usage_retry_after_s"], row["error"], row["source"]),
+                         (None, None, None, "usage"))
+        self.assertIsNone(row["five_hour"])
+        self.assertEqual(row["seven_day"]["used_percent"], 0)
+        self.assertFalse(os.path.exists(os.path.join(os.path.realpath(self.env.state), "probe",
+                                                     "last-unrecognized-claude.txt")))
+
+    def test_launchagent_run_keeps_pause_with_values(self):
+        """WDRC-100 kept: without a click, the pause and the old values stay until the retry is due."""
+        install_fake_claude(self.env, stdout_file=NO_SESSION)
+        self.paused_with_values()
+        self.collect()
+        self.assertNotIn("/usage", [c["argv"][-1] for c in claude_calls(self.env)])
+        row = self.row()
+        self.assertEqual((row["usage_disabled_version"], row["error"], row["five_hour"]["used_percent"],
+                          row["seven_day"]["used_percent"]), (VERSION, PAUSED, 100, 14))
 
     def test_no_identity_in_snapshot(self):
         install_fake_claude(self.env, stdout="Account: user@example.com\nOrg: Example Org\n" + USAGE)

@@ -269,6 +269,16 @@ check("load_valid", valid.map { rows($0, now: t) }, [
     DisplayRow(title: "claude", client: "claude", bars: [], notice: "timed out", stale: true),
 ])
 check("load_error_field", valid.map { $0.accounts.map(\.error) }, [nil, nil, nil, "timed out"])
+// WDRC-908: a claude account whose /usage has only the 7-day limit (five_hour null) shows 7D alone, no 5H
+let weeklyOnly = load("""
+{"schema": 1, "generated_at": \(t),
+ "accounts": [{"name": "claude", "client": "claude", "five_hour": null,
+   "seven_day": {"used_percent": 0, "resets_at": \(t + 3600)}, "fetched_at": \(t), "source": "usage",
+   "stale": false, "needs_login": false, "error": null}]}
+""")
+check("load_weekly_only_claude", weeklyOnly.map { rows($0, now: t) }, [
+    DisplayRow(title: "claude", client: "claude", bars: [Bar(label: "7D", percent: 0, reset: "resets: 1h 0m")]),
+])
 
 // alertLines (macos/Host/Alerts.swift): only `AUM-ALERT ` lines with a JSON string `text`
 func alertTexts(_ output: Data) -> [String] { alertLines(output).map(\.text) }

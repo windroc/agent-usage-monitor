@@ -133,6 +133,14 @@ class FixtureTest(unittest.TestCase):
                 "five_hour": {"used_percent": 13, "resets_at": local(NY, 2026, 10, 17, 14, 40)},
                 "seven_day": {"used_percent": 14, "resets_at": local(NY, 2026, 10, 24, 1, 0)}})
 
+    def test_no_session_fixture(self):
+        """WDRC-908: right after a reset /usage prints no `Current session` line: 7d reads, 5h is absent."""
+        parsed = claude_usage.parse(fixture("no-session.stdout.txt"))
+        self.assertEqual(parsed, {"session_left": None, "weekly_left": 100, "session_reset": None,
+                                  "weekly_reset": "resets Nov 14 at 11am (America/New_York)"})
+        self.assertEqual(claude_usage.make_windows(parsed, iso("2026-11-14T03:00:00Z")), {
+            "five_hour": None, "seven_day": {"used_percent": 0, "resets_at": local(NY, 2026, 11, 14, 11, 0)}})
+
     def test_no_weekly_is_absent_window(self):
         parsed = claude_usage.parse("Current session: 40% used · resets 3pm (UTC)\n")
         self.assertEqual(parsed["weekly_left"], None)
@@ -216,11 +224,17 @@ class ErrorKindTest(unittest.TestCase):
             ("", "timeout"),
             ("  \n\x1b[0m\n", "timeout"),
             ("50% used\n", "unrecognized"),
-            ("Current week (all models): 50% used\n", "unrecognized"),
+            ("Current week (Fable): 1% used\n", "unrecognized"),
+            # a session label the parser cannot read is not a missing 5h window (CodexBar's `Curretsession` samples)
+            ("Curretsession\n15%used\nCurrent week (all models): 3% used\n", "unrecognized"),
             ("hello from a model\n", "unrecognized"),
         ]
         for text, expected in cases:
             self.assertEqual(self.kind(text), expected, text)
+
+    def test_weekly_only_is_not_an_error(self):
+        parsed = claude_usage.parse("Current week (all models): 50% used\n")
+        self.assertEqual((parsed["session_left"], parsed["weekly_left"]), (None, 50))
 
 
 class NoticeTest(unittest.TestCase):

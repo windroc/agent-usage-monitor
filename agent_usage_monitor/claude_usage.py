@@ -422,11 +422,18 @@ def _latest_usage_panel(text):
     return tail if ("%" in lower and words) or "loading usage" in lower else None
 
 
+def _unread_session_label(line):
+    n = _norm(line)
+    return n.startswith("curr") and "session" in n
+
+
 def parse(text):
     """Return {session_left, weekly_left, session_reset, weekly_reset} or raise UsageError.
 
-    Not ported: identity, Opus and model-scoped weekly windows, and the first-percent fallback
-    when there is no `Current session` label (that is `unrecognized` here).
+    No `Current session` label, as right after a reset, is no 5h window: session fields None (WDRC-908). The
+    output is `unrecognized` without the all-models weekly percent too, or when a line reads like a session label
+    the parser cannot match (CodexBar's `Curretsession` samples), which must not pass for an absent 5h window.
+    Not ported: identity, Opus and model-scoped weekly windows, and the first-percent fallback.
     """
     clean = clean_capture(text)
     if not clean.strip():
@@ -440,12 +447,13 @@ def parse(text):
         raise UsageError("loading", "Claude CLI /usage is still loading usage data.")
     lines = _NEWLINES.split(panel or clean)
     session = _after_label(lines, SESSION_LABEL, 12, percent_left)
-    if session is None:
+    weekly = _after_label(lines, WEEKLY_LABEL, 12, percent_left)
+    if session is None and (weekly is None or any(_unread_session_label(line) for line in lines)):
         raise UsageError("unrecognized", "Missing Current session.")
     has_weekly = any(_is_all_models(_norm(m)) for m in filter(None, map(_weekly_model, lines)))
     return {
         "session_left": session,
-        "weekly_left": _after_label(lines, WEEKLY_LABEL, 12, percent_left),
+        "weekly_left": weekly,
         "session_reset": _after_label(lines, SESSION_LABEL, 14, reset_description),
         "weekly_reset": _after_label(lines, WEEKLY_LABEL, 14, reset_description) if has_weekly else None,
     }
