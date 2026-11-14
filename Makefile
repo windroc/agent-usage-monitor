@@ -64,6 +64,10 @@ install: app
 	umask 077 && touch "$(LOG)" && chmod 600 "$(LOG)"
 	mkdir -p "$$(dirname "$(PLIST)")"
 	cp $(AGENT) "$(PLIST)"
+	# Reload, so launchd runs the newly signed app; why: README, Install.
+	if launchctl print gui/$$(id -u)/com.windroc.agent-usage-monitor >/dev/null 2>&1; then \
+		launchctl bootout gui/$$(id -u)/com.windroc.agent-usage-monitor; fi
+	launchctl bootstrap gui/$$(id -u) "$(PLIST)"
 
 uninstall:
 	-launchctl bootout gui/$$(id -u)/com.windroc.agent-usage-monitor
