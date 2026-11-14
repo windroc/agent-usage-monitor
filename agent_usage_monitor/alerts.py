@@ -53,10 +53,11 @@ def evaluate(snap, threshold, now):
         mine = [k for k in notified if k["name"] == row["name"]]
 
         def ended(k):
-            # WDRC-91: a provider may reset a window before the resets_at in the key
+            # WDRC-91: a provider may reset a window before the resets_at in the key;
+            # WDRC-909: a None window is one the last successful read no longer reports (a failed read keeps values)
             w = row.get(k["window"])
-            if w is not None and (not _same_reset(k["resets_at"], w["resets_at"])
-                                  or w["used_percent"] is not None and w["used_percent"] < threshold):
+            if w is None or not _same_reset(k["resets_at"], w["resets_at"]) \
+                    or w["used_percent"] is not None and w["used_percent"] < threshold:
                 return True
             return k["resets_at"] is not None and k["resets_at"] <= now
 

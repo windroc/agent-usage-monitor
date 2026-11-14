@@ -29,11 +29,11 @@ class AlertsTest(unittest.TestCase):
         self.addCleanup(self.env.cleanup)
         self.accounts = [Account("claude-max", "claude", "/d/max", "you@example.com"), Account("cx", "codex", "/d/cx")]
 
-    def write(self, updates=None, now=NOW, threshold=90, emit=True, accounts=None, delivered=True):
+    def write(self, updates=None, now=NOW, threshold=90, emit=True, accounts=None, delivered=True, failed=()):
         """One collect; the host hands every alert to macOS unless delivered is False. Returns the texts."""
         sent = []
         store.write(self.env.state, self.accounts if accounts is None else accounts, threshold, updates or {},
-                    now=now, emit=sent.append if emit else None)
+                    failed=failed, now=now, emit=sent.append if emit else None)
         if delivered and sent:
             self.assertEqual(store.record(self.env.state, sent), [])
         return [a["text"] for a in sent]
@@ -164,11 +164,29 @@ class AlertsTest(unittest.TestCase):
                          ["codex · cx available again"])
         self.assertEqual(self.notified(), [])
 
-    def test_window_no_longer_reported_ends_at_stored_reset(self):
-        self.write({"cx": {"five_hour": w(95, NOW + H), "seven_day": w(10, NOW + DAY)}})
+    def test_window_no_longer_reported_ends_at_once(self):
+        """WDRC-909: after a reset, Claude's /usage reports no 5h window; available again on that read."""
+        self.write({"claude-max": {"five_hour": w(95, NOW + H), "seven_day": w(10, NOW + DAY)}})
+        self.assertEqual(self.notified(), [self.full("claude-max", "five_hour", NOW + H)])
+        self.assertEqual(self.write({"claude-max": {"five_hour": None, "seven_day": w(0, NOW + DAY)}}, now=NOW + 300),
+                         ["claude · you@example.com available again"])
+        self.assertEqual(self.notified(), [])
+
+    def test_window_no_longer_reported_while_not_available_no_alert(self):
+        self.write({"cx": {"five_hour": w(95, NOW + H), "seven_day": w(95, NOW + DAY)}})
         self.assertEqual(self.write({"cx": {"five_hour": None}}, now=NOW + 300), [])
-        self.assertEqual(len(self.notified()), 1)
-        self.assertEqual(self.write(now=NOW + H + 60), ["codex · cx available again"])
+        self.assertEqual(len(self.notified()), 2, "7d still blocks")
+        self.assertEqual(self.write(now=NOW + DAY + 60), ["codex · cx available again"])
+        self.assertEqual(self.notified(), [])
+
+    def test_failed_read_keeps_key_until_stored_reset(self):
+        """A paused or failed probe keeps the row's values: no early end without a successful read."""
+        self.write({"claude-max": {"five_hour": w(95, NOW + H), "seven_day": w(10, NOW + DAY), "fetched_at": NOW}})
+        self.assertEqual(self.write(failed={"claude-max"}, now=NOW + 300), [])
+        row = next(r for r in self.env.snapshot()["accounts"] if r["name"] == "claude-max")
+        self.assertEqual((row["source"], row["five_hour"]), ("cache", w(95, NOW + H)), "values kept")
+        self.assertEqual(self.notified(), [self.full("claude-max", "five_hour", NOW + H)])
+        self.assertEqual(self.write(failed={"claude-max"}, now=NOW + H + 60), ["claude · you@example.com available again"])
         self.assertEqual(self.notified(), [])
 
     def test_not_available_unknown_no_alert(self):
